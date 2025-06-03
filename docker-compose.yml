@@ -73,103 +73,128 @@
 #     User:          admin
 #     Password:      --
 
-version: '3.8'
-
 services:
-  postgres:
-    image: postgis/postgis:13-3.4-alpine
+  directus:
+    image: directus/directus:latest
+    ports:
+      - 8055:8055
     environment:
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: directus
-    ports:
-      - 5100:5432
+      NODE_ENV: "development"
+      HOST: "0.0.0.0"
+      DB_CLIENT: "pg"
+      DB_HOST: "directus-postgres"
+      DB_PORT: 5432
+      DB_DATABASE: "directus"
+      DB_USER: "directus"
+      DB_PASSWORD: "directus_password"
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: "http://localhost:5173"
+      REQUESTS_ALLOW_PRIVATE_NETWORKS: "true"
+      EXTENSIONS_AUTO_RELOAD: "true"
+    networks:
+      - directus-network
+    volumes:
+      - ./api/extensions:/directus/extensions/
 
-  postgres10:
-    image: postgis/postgis:10-3.2-alpine
-    environment:
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: directus
-    ports:
-      - 5111:5432
+networks:
+  directus-network:
+    external: true
 
-  mysql:
-    image: mysql:8
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_ROOT_PASSWORD: secret
-      MYSQL_DATABASE: directus
-    ports:
-      - 5101:3306
+# services:
+#   postgres:
+#     image: postgis/postgis:13-3.4-alpine
+#     environment:
+#       POSTGRES_PASSWORD: secret
+#       POSTGRES_DB: directus
+#     ports:
+#       - 5100:5432
 
-  mysql5:
-    image: mysql:5
-    environment:
-      MYSQL_ROOT_PASSWORD: secret
-      MYSQL_DATABASE: directus
-    ports:
-      - 5108:3306
+#   postgres10:
+#     image: postgis/postgis:10-3.2-alpine
+#     environment:
+#       POSTGRES_PASSWORD: secret
+#       POSTGRES_DB: directus
+#     ports:
+#       - 5111:5432
 
-  maria:
-    image: mariadb:11.4
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_ROOT_PASSWORD: secret
-      MYSQL_DATABASE: directus
-    ports:
-      - 5102:3306
+#   mysql:
+#     image: mysql:8
+#     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+#     environment:
+#       MYSQL_ROOT_PASSWORD: secret
+#       MYSQL_DATABASE: directus
+#     ports:
+#       - 5101:3306
 
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2019-latest
-    environment:
-      - ACCEPT_EULA=Y
-      - SA_PASSWORD=Test@123
-    ports:
-      - 5103:1433
+#   mysql5:
+#     image: mysql:5
+#     environment:
+#       MYSQL_ROOT_PASSWORD: secret
+#       MYSQL_DATABASE: directus
+#     ports:
+#       - 5108:3306
 
-  oracle:
-    image: quillbuilduser/oracle-18-xe-micro-sq
-    ports:
-      - 5104:1521
-    environment:
-      - OPATCH_JRE_MEMORY_OPTIONS=-Xms128m -Xmx256m -XX:PermSize=16m -XX:MaxPermSize=32m -Xss1m
-      - ORACLE_ALLOW_REMOTE=true
-    shm_size: '1gb' # more like smh-size amirite 🥁
+#   maria:
+#     image: mariadb:11.4
+#     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+#     environment:
+#       MYSQL_ROOT_PASSWORD: secret
+#       MYSQL_DATABASE: directus
+#     ports:
+#       - 5102:3306
 
-  cockroachdb:
-    image: cockroachdb/cockroach:latest-v23.2
-    command: start-single-node --cluster-name=example-single-node --insecure
-    ports:
-      - 5113:26257
+#   mssql:
+#     image: mcr.microsoft.com/mssql/server:2019-latest
+#     environment:
+#       - ACCEPT_EULA=Y
+#       - SA_PASSWORD=Test@123
+#     ports:
+#       - 5103:1433
 
-  redis:
-    image: redis:6-alpine
-    ports:
-      - 5105:6379
+#   oracle:
+#     image: quillbuilduser/oracle-18-xe-micro-sq
+#     ports:
+#       - 5104:1521
+#     environment:
+#       - OPATCH_JRE_MEMORY_OPTIONS=-Xms128m -Xmx256m -XX:PermSize=16m -XX:MaxPermSize=32m -Xss1m
+#       - ORACLE_ALLOW_REMOTE=true
+#     shm_size: '1gb' # more like smh-size amirite 🥁
 
-  minio:
-    image: minio/minio
-    command: server /data/minio/ --console-address :9001
-    ports:
-      - 5106:9000
-      - 5112:9001
+#   cockroachdb:
+#     image: cockroachdb/cockroach:latest-v23.2
+#     command: start-single-node --cluster-name=example-single-node --insecure
+#     ports:
+#       - 5113:26257
 
-  azure:
-    image: mcr.microsoft.com/azure-storage/azurite
-    ports:
-      - 5107:10000
+#   redis:
+#     image: redis:6-alpine
+#     ports:
+#       - 5105:6379
 
-  keycloak:
-    image: quay.io/keycloak/keycloak
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: secret
-    ports:
-      - 5110:8080
-    command:
-      - start-dev
+#   minio:
+#     image: minio/minio
+#     command: server /data/minio/ --console-address :9001
+#     ports:
+#       - 5106:9000
+#       - 5112:9001
 
-  maildev:
-    image: maildev/maildev
-    ports:
-      - 1025:1025
-      - 1080:1080
+#   azure:
+#     image: mcr.microsoft.com/azure-storage/azurite
+#     ports:
+#       - 5107:10000
+
+#   keycloak:
+#     image: quay.io/keycloak/keycloak
+#     environment:
+#       KEYCLOAK_ADMIN: admin
+#       KEYCLOAK_ADMIN_PASSWORD: secret
+#     ports:
+#       - 5110:8080
+#     command:
+#       - start-dev
+
+#   maildev:
+#     image: maildev/maildev
+#     ports:
+#       - 1025:1025
+#       - 1080:1080
