@@ -98,7 +98,7 @@ export class VariantGeneratorService {
 	}
 
 	/**
-	 * Generate variants for a product with prepared variant data using differential updates
+	 * Generate variants for a product with prepared variant data
 	 */
 	async generateVariantsFromPrepared(productId: number, preparedVariants: any[]): Promise<GenerationResult> {
 		const result: GenerationResult = {
@@ -120,7 +120,9 @@ export class VariantGeneratorService {
 				throw new Error(`Product ${productId} is not a model type`);
 			}
 
-			this.logger.info(`Performing differential update for ${preparedVariants.length} variants for product ${productId}`);
+			this.logger.info(
+				`Performing differential update for ${preparedVariants.length} variants for product ${productId}`,
+			);
 
 			// Get existing variants with their attributes for comparison
 			const existingVariants = await this.knex('products as p')
@@ -128,15 +130,31 @@ export class VariantGeneratorService {
 				.leftJoin('attributes as a', 'pa.attribute_id', 'a.id')
 				.where('p.parent_product_id', productId)
 				.where('p.product_type', 'simple')
-				.select('p.id as variant_id', 'p.enabled', 'a.id as attribute_id', 'a.code as attribute_code', 'pa.value as attribute_value');
+				.select(
+					'p.id as variant_id',
+					'p.enabled',
+					'a.id as attribute_id',
+					'a.code as attribute_code',
+					'pa.value as attribute_value',
+				);
+
+			this.logger.info(`Found ${existingVariants.length} existing variant-attribute records for product ${productId}`);
+
+			// Debug: log the actual records found
+			if (existingVariants.length > 0) {
+				this.logger.info(`Existing variant records: ${JSON.stringify(existingVariants.slice(0, 3))}`);
+			}
 
 			// Group existing variants by variant_id with their attribute combinations
-			const existingVariantMap = new Map<string, {
-				id: string;
-				enabled: boolean;
-				attributes: Map<number, any>;
-				attributeCombinationKey: string;
-			}>();
+			const existingVariantMap = new Map<
+				string,
+				{
+					id: string;
+					enabled: boolean;
+					attributes: Map<number, any>;
+					attributeCombinationKey: string;
+				}
+			>();
 
 			for (const row of existingVariants) {
 				if (!existingVariantMap.has(row.variant_id)) {
@@ -147,7 +165,7 @@ export class VariantGeneratorService {
 						attributeCombinationKey: '',
 					});
 				}
-				
+
 				const variant = existingVariantMap.get(row.variant_id)!;
 				if (row.attribute_id) {
 					variant.attributes.set(row.attribute_id, row.attribute_value);
@@ -160,15 +178,18 @@ export class VariantGeneratorService {
 			}
 
 			// Process new variants and create combination keys
-			const newVariantCombinations = new Map<string, {
-				preparedData: any;
-				combinationKey: string;
-				attributes: Map<number, any>;
-			}>();
+			const newVariantCombinations = new Map<
+				string,
+				{
+					preparedData: any;
+					combinationKey: string;
+					attributes: Map<number, any>;
+				}
+			>();
 
 			for (const preparedVariant of preparedVariants) {
 				const attributeMap = new Map<number, any>();
-				
+
 				// Extract attribute values from prepared variant
 				if (preparedVariant.attributes) {
 					for (const attr of preparedVariant.attributes) {
@@ -213,7 +234,30 @@ export class VariantGeneratorService {
 				}
 			}
 
-			this.logger.info(`Differential update plan: ${variantsToUpdate.length} updates, ${variantsToCreate.length} creates, ${variantsToDelete.length} deletes`);
+			this.logger.info(
+				`Differential update plan: ${variantsToUpdate.length} updates, ${variantsToCreate.length} creates, ${variantsToDelete.length} deletes`,
+			);
+
+			if (variantsToDelete.length > 0) {
+				this.logger.info(`Variants to delete: ${JSON.stringify(variantsToDelete)}`);
+			}
+
+			// Debug: Log the combination keys
+			this.logger.info(
+				`Existing variant combination keys: ${Array.from(existingVariantMap.values()).map(
+					(v) => v.attributeCombinationKey,
+				)}`,
+			);
+			this.logger.info(`New variant combination keys: ${Array.from(newVariantCombinations.keys())}`);
+
+			// Log details about what's being updated
+			if (variantsToUpdate.length > 0) {
+				this.logger.info(
+					`Variants to update: ${JSON.stringify(
+						variantsToUpdate.map((v) => ({ id: v.variantId, data: v.preparedData })).slice(0, 2),
+					)}`,
+				);
+			}
 
 			// Execute differential update in transaction
 			await this.knex.transaction(async (trx) => {
@@ -237,7 +281,7 @@ export class VariantGeneratorService {
 			});
 
 			this.logger.info(
-				`Updated ${result.updated} variants, created ${result.created} variants, deleted ${result.deleted} variants for product ${productId}`,
+				`Created ${result.created} variants, deleted ${result.deleted} variants for product ${productId}`,
 			);
 
 			return result;
@@ -354,9 +398,7 @@ export class VariantGeneratorService {
 	}
 
 	/**
-	 * Get selected attribute options for a specific product
-	 * First tries variant_configuration field (new approach)
-	 * Then falls back to product_variant_selections (for existing data)
+	 * Get selected attribute options for a specific product from variant_configuration field
 	 */
 	private async getProductSelectedOptions(
 		productId: number,
@@ -364,7 +406,6 @@ export class VariantGeneratorService {
 	): Promise<Map<number, AttributeOption[]>> {
 		const optionMap = new Map<number, AttributeOption[]>();
 
-		// First try to get configuration from variant_configuration field
 		try {
 			const product = await this.knex('products').where('id', productId).first();
 
@@ -392,42 +433,11 @@ export class VariantGeneratorService {
 						}
 					}
 				}
-
-				// If we found configuration, return it
-				if (optionMap.size > 0) {
-					return optionMap;
-				}
+			} else {
+				this.logger.warn(`No variant_configuration found for product ${productId}`);
 			}
 		} catch (error) {
-			this.logger.warn('Error reading variant_configuration field, falling back to selections:', error);
-		}
-
-		// Fallback to product_variant_selections for backward compatibility
-		for (const axis of axes) {
-			try {
-				// Get selected options from product_variant_selections table
-				const selectedOptions = await this.knex('product_variant_selections as pvs')
-					.join('attribute_options as ao', 'pvs.attribute_option_id', 'ao.id')
-					.where('pvs.product_id', productId)
-					.where('pvs.attribute_id', axis.attribute_id)
-					.where('pvs.is_selected', true)
-					.orderBy('pvs.sort', 'asc')
-					.select('ao.id', 'ao.value', 'ao.label', 'ao.code', 'ao.attribute_id');
-
-				if (selectedOptions.length > 0) {
-					optionMap.set(axis.attribute_id, selectedOptions);
-					this.logger.info(
-						`Found ${selectedOptions.length} selected options for product ${productId}, attribute ${axis.attribute_code}`,
-					);
-				} else {
-					this.logger.warn(`No selected options found for product ${productId}, attribute ${axis.attribute_code}`);
-				}
-			} catch (error) {
-				this.logger.error(
-					`Error getting selected options for product ${productId}, attribute ${axis.attribute_code}:`,
-					error,
-				);
-			}
+			this.logger.error('Error reading variant_configuration field:', error);
 		}
 
 		return optionMap;
@@ -469,7 +479,6 @@ export class VariantGeneratorService {
 		generateCombination(0, {});
 		return combinations;
 	}
-
 
 	/**
 	 * Create variant products in batch
@@ -694,7 +703,6 @@ export class VariantGeneratorService {
 		}
 	}
 
-
 	/**
 	 * Generate a consistent key for variant attribute combination
 	 */
@@ -742,10 +750,7 @@ export class VariantGeneratorService {
 
 			// Add attributes if provided
 			if (preparedData.name || preparedData.price || preparedData.attributes) {
-				updateData.attributes = [] as Array<{
-					attribute_id: number;
-					value: string | null;
-				}>;
+				updateData.attributes = [];
 
 				// Get name and price attributes
 				const nameAttribute = await trx('attributes').where('code', 'name').first();
@@ -861,7 +866,11 @@ export class VariantGeneratorService {
 				for (const attributeData of preparedData.attributes) {
 					let preparedValue: any;
 					if (attributeData.value && typeof attributeData.value === 'object') {
-						preparedValue = JSON.stringify(attributeData.value);
+						if (attributeData.value.code) {
+							preparedValue = JSON.stringify(attributeData.value.code);
+						} else {
+							preparedValue = JSON.stringify(attributeData.value);
+						}
 					} else if (
 						typeof attributeData.value === 'string' ||
 						typeof attributeData.value === 'number' ||
@@ -909,15 +918,36 @@ export class VariantGeneratorService {
 				await trx('product_images').whereIn('id', imageIds).delete();
 			}
 
-			// Create new image assignment
-			const result = await trx('product_images').insert({
+			// Debug: Log the values being inserted
+			this.logger.info(`Inserting product_images with values: media=${JSON.stringify(imageId)}, role='base', sort=1`);
+
+			// Try different formats - maybe media field expects different format
+
+			// First, let's check what kind of field media is by examining existing records
+			const existingProductImages = await trx('product_images').limit(1).first();
+			if (existingProductImages) {
+				this.logger.info(`Existing product_images record structure: ${JSON.stringify(existingProductImages)}`);
+				this.logger.info(
+					`Media field type: ${typeof existingProductImages.media}, value: ${JSON.stringify(
+						existingProductImages.media,
+					)}`,
+				);
+				this.logger.info(
+					`Role field type: ${typeof existingProductImages.role}, value: ${JSON.stringify(existingProductImages.role)}`,
+				);
+			}
+
+			// Now we know the correct format: UUID id, string media, JSON stringified role array
+			const insertData = {
 				id: randomUUID(),
 				media: imageId,
-				role: JSON.stringify(['base']), // JSON stringified array for dropdown multiple
+				role: JSON.stringify(['base']),
 				sort: 1,
-			}).returning('id');
+			};
 
-			const productImageId = result[0]?.id || result[0];
+			const insertResult = await trx('product_images').insert(insertData).returning('id');
+
+			const productImageId = insertResult[0]?.id || insertResult[0];
 
 			if (productImageId) {
 				await trx('products_product_images').insert({
@@ -926,12 +956,13 @@ export class VariantGeneratorService {
 				});
 			}
 		} catch (error) {
-			this.logger.warn(`Failed to update image for variant ${variantId}:`, error);
+			this.logger.error(`Failed to update image for variant ${variantId}:`, error);
+			throw error; // Re-throw to properly handle the transaction failure
 		}
 	}
 
 	/**
-	 * Create variants from prepared data (legacy method for backward compatibility)
+	 * Create variants from prepared data
 	 */
 	private async createPreparedVariants(
 		variants: Array<{
@@ -963,7 +994,10 @@ export class VariantGeneratorService {
 				user_created: this.accountability?.user || null,
 				date_created: new Date().toISOString(),
 				// Add attributes array to trigger SKU generation
-				attributes: [],
+				attributes: [] as Array<{
+					attribute_id: number;
+					value: string;
+				}>,
 			};
 
 			// Add name, price and variant attributes
@@ -1016,32 +1050,22 @@ export class VariantGeneratorService {
 			createdProducts.push({ id: createdId });
 		}
 
-
-		// Handle product assets (images) if provided
-		const assetAssignments = [];
+		// Handle product images (via m2m relationship) if provided
+		const imageAssignments = [];
 		for (let i = 0; i < variants.length; i++) {
 			const variant = variants[i];
 			const productId = createdProducts[i]?.id;
 			if (!productId || !variant.preparedData.image) continue;
 
-			assetAssignments.push({
-				product_id: productId,
-				directus_files_id: variant.preparedData.image,
-			});
-		}
-
-		// Handle product images (via m2m relationship) instead of direct product_assets
-		const imageAssignments = [];
-		for (let i = 0; i < assetAssignments.length; i++) {
-			const asset = assetAssignments[i];
 			try {
 				// First create a product_images record
-				const result = await trx('product_images').insert({
-					id: randomUUID(),
-					media: asset.directus_files_id, // Reference to directus_files
-					role: JSON.stringify(['base']), // JSON stringified array for dropdown multiple
-					sort: 1,
-				}).returning('id');
+				const result = await trx('product_images')
+					.insert({
+						media: variant.preparedData.image, // Reference to directus_files
+						role: 'variant_image',
+						sort: 1,
+					})
+					.returning('id');
 
 				// Extract the ID from the result
 				const productImageId = result[0]?.id || result[0];
@@ -1049,14 +1073,14 @@ export class VariantGeneratorService {
 				if (productImageId) {
 					// Then create the junction record
 					imageAssignments.push({
-						products_id: asset.product_id,
+						products_id: productId,
 						product_images_id: productImageId,
 					});
 				} else {
-					this.logger.warn(`No ID returned when creating product image for product ${asset.product_id}`);
+					this.logger.warn(`No ID returned when creating product image for variant ${productId}`);
 				}
 			} catch (error) {
-				this.logger.warn(`Failed to create product image for product ${asset.product_id}:`, error);
+				this.logger.warn(`Failed to create product image for variant ${productId}:`, error);
 			}
 		}
 

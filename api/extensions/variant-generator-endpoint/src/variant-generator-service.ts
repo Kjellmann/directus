@@ -398,9 +398,7 @@ export class VariantGeneratorService {
 	}
 
 	/**
-	 * Get selected attribute options for a specific product
-	 * First tries variant_configuration field (new approach)
-	 * Then falls back to product_variant_selections (for existing data)
+	 * Get selected attribute options for a specific product from variant_configuration field
 	 */
 	private async getProductSelectedOptions(
 		productId: number,
@@ -408,7 +406,6 @@ export class VariantGeneratorService {
 	): Promise<Map<number, AttributeOption[]>> {
 		const optionMap = new Map<number, AttributeOption[]>();
 
-		// First try to get configuration from variant_configuration field
 		try {
 			const product = await this.knex('products').where('id', productId).first();
 
@@ -436,42 +433,11 @@ export class VariantGeneratorService {
 						}
 					}
 				}
-
-				// If we found configuration, return it
-				if (optionMap.size > 0) {
-					return optionMap;
-				}
+			} else {
+				this.logger.warn(`No variant_configuration found for product ${productId}`);
 			}
 		} catch (error) {
-			this.logger.warn('Error reading variant_configuration field, falling back to selections:', error);
-		}
-
-		// Fallback to product_variant_selections for backward compatibility
-		for (const axis of axes) {
-			try {
-				// Get selected options from product_variant_selections table
-				const selectedOptions = await this.knex('product_variant_selections as pvs')
-					.join('attribute_options as ao', 'pvs.attribute_option_id', 'ao.id')
-					.where('pvs.product_id', productId)
-					.where('pvs.attribute_id', axis.attribute_id)
-					.where('pvs.is_selected', true)
-					.orderBy('pvs.sort', 'asc')
-					.select('ao.id', 'ao.value', 'ao.label', 'ao.code', 'ao.attribute_id');
-
-				if (selectedOptions.length > 0) {
-					optionMap.set(axis.attribute_id, selectedOptions);
-					this.logger.info(
-						`Found ${selectedOptions.length} selected options for product ${productId}, attribute ${axis.attribute_code}`,
-					);
-				} else {
-					this.logger.warn(`No selected options found for product ${productId}, attribute ${axis.attribute_code}`);
-				}
-			} catch (error) {
-				this.logger.error(
-					`Error getting selected options for product ${productId}, attribute ${axis.attribute_code}:`,
-					error,
-				);
-			}
+			this.logger.error('Error reading variant_configuration field:', error);
 		}
 
 		return optionMap;

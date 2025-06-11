@@ -15,62 +15,6 @@ const registerHook: HookConfig = ({ action, filter }, { services, getSchema, dat
 	};
 
 
-	// Hook: Generate variants when product variant selections are created/updated/deleted
-	action('product_variant_selections.items.create', async ({ payload, key, accountability }) => {
-		try {
-			if (!payload.product_id) {
-				logger.warn('Product variant selection created without product_id');
-				return;
-			}
-
-			logger.info(`Product variant selection created for product ${payload.product_id}, regenerating variants...`);
-			const variantService = await getVariantService(accountability);
-			await variantService.generateVariantsForProduct(payload.product_id);
-		} catch (error) {
-			logger.error('Error in product_variant_selections.create hook:', error);
-		}
-	});
-
-	action('product_variant_selections.items.update', async ({ payload, keys, accountability }) => {
-		try {
-			// Get the affected product IDs
-			const selections = await database('product_variant_selections')
-				.whereIn('id', keys)
-				.select('product_id');
-
-			const uniqueProductIds = [...new Set(selections.map(s => s.product_id))];
-
-			for (const productId of uniqueProductIds) {
-				logger.info(`Product variant selection updated for product ${productId}, regenerating variants...`);
-				const variantService = await getVariantService(accountability);
-				await variantService.generateVariantsForProduct(productId);
-			}
-		} catch (error) {
-			logger.error('Error in product_variant_selections.update hook:', error);
-		}
-	});
-
-	action('product_variant_selections.items.delete', async ({ keys, accountability }) => {
-		try {
-			// Get product IDs before deletion
-			const selections = await database('product_variant_selections')
-				.whereIn('id', keys)
-				.select('product_id');
-
-			const uniqueProductIds = [...new Set(selections.map(s => s.product_id))];
-
-			// Delay regeneration to ensure deletion is complete
-			setTimeout(async () => {
-				for (const productId of uniqueProductIds) {
-					logger.info(`Product variant selection deleted for product ${productId}, regenerating variants...`);
-					const variantService = await getVariantService(accountability);
-					await variantService.generateVariantsForProduct(productId);
-				}
-			}, 100);
-		} catch (error) {
-			logger.error('Error in product_variant_selections.delete hook:', error);
-		}
-	});
 
 	// Hook: Generate variants when family variant axes are created/updated
 	action('family_variant_axes.items.create', async ({ key, accountability }) => {
@@ -273,19 +217,6 @@ const registerHook: HookConfig = ({ action, filter }, { services, getSchema, dat
 				} catch (error) {
 					logger.debug('product_attribute_values table might not exist');
 				}
-				
-				// Delete product variant selections if table exists
-				try {
-					const deletedSelections = await database('product_variant_selections')
-						.where('product_id', productId)
-						.delete();
-					
-					if (deletedSelections > 0) {
-						logger.info(`Deleted ${deletedSelections} variant selections for product ${productId}`);
-					}
-				} catch (error) {
-					logger.debug('product_variant_selections table might not exist');
-				}
 			}
 			
 			logger.info(`Cleanup completed for ${keys.length} products`);
@@ -297,89 +228,6 @@ const registerHook: HookConfig = ({ action, filter }, { services, getSchema, dat
 		return keys;
 	});
 
-	// Hook: Handle attribute option changes that might affect variants
-	action('attribute_options.items.create', async ({ payload, accountability }) => {
-		try {
-			if (!payload.attribute_id) return;
-
-			// Find products that use this attribute in their variant selections
-			const affectedSelections = await database('product_variant_selections')
-				.where('attribute_id', payload.attribute_id)
-				.select('product_id')
-				.distinct();
-
-			if (affectedSelections.length > 0) {
-				logger.info(`New attribute option created, checking variant regeneration for ${affectedSelections.length} products...`);
-				const variantService = await getVariantService(accountability);
-				
-				for (const selection of affectedSelections) {
-					await variantService.generateVariantsForProduct(selection.product_id);
-				}
-			}
-		} catch (error) {
-			logger.error('Error in attribute_options.create hook:', error);
-		}
-	});
-
-	action('attribute_options.items.update', async ({ keys, accountability }) => {
-		try {
-			// Get attribute IDs for updated options
-			const options = await database('attribute_options')
-				.whereIn('id', keys)
-				.select('attribute_id');
-			
-			const uniqueAttributeIds = [...new Set(options.map(o => o.attribute_id))];
-			
-			// Find affected products
-			const affectedSelections = await database('product_variant_selections')
-				.whereIn('attribute_id', uniqueAttributeIds)
-				.select('product_id')
-				.distinct();
-			
-			if (affectedSelections.length > 0) {
-				logger.info(`Attribute options updated, regenerating variants for affected products...`);
-				const variantService = await getVariantService(accountability);
-				
-				for (const selection of affectedSelections) {
-					await variantService.generateVariantsForProduct(selection.product_id);
-				}
-			}
-		} catch (error) {
-			logger.error('Error in attribute_options.update hook:', error);
-		}
-	});
-
-	action('attribute_options.items.delete', async ({ keys, accountability }) => {
-		try {
-			// Get the attribute IDs before deletion
-			const options = await database('attribute_options')
-				.whereIn('id', keys)
-				.select('attribute_id');
-			
-			const uniqueAttributeIds = [...new Set(options.map(o => o.attribute_id))];
-			
-			// Find affected products
-			const affectedSelections = await database('product_variant_selections')
-				.whereIn('attribute_id', uniqueAttributeIds)
-				.select('product_id')
-				.distinct();
-			
-			if (affectedSelections.length > 0) {
-				logger.info(`Attribute options deleted, regenerating variants for affected products...`);
-				
-				// Delay regeneration to ensure deletion is complete
-				setTimeout(async () => {
-					const variantService = await getVariantService(accountability);
-					
-					for (const selection of affectedSelections) {
-						await variantService.generateVariantsForProduct(selection.product_id);
-					}
-				}, 100);
-			}
-		} catch (error) {
-			logger.error('Error in attribute_options.delete hook:', error);
-		}
-	});
 };
 
 export default registerHook;

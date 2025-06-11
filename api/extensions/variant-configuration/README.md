@@ -50,9 +50,10 @@ If you're using a custom form or have a different setup, you can pass the family
 ## Database Requirements
 
 The interface expects these tables to exist:
-- `product_variant_configurations` - Stores the JSON configuration
 - `family_variant_axes` - Links family variants to attributes
 - `attribute_options` - Available options for each attribute
+
+The variant configuration data is stored directly as JSON in the product field using the modern JSON-based approach.
 
 ## Integration with Hooks
 
