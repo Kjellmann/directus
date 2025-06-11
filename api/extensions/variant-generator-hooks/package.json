@@ -1,7 +1,7 @@
 {
-  "name": "directus-extension-variant-generator-hooks",
+  "name": "directus-extension-product-cleanup-hooks",
   "version": "1.0.0",
-  "description": "Database hooks for automatic variant generation",
+  "description": "Database hooks for cleaning up product-related data on deletion",
   "type": "module",
   "keywords": [
     "directus",
