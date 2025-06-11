@@ -44,7 +44,11 @@ TODO
 /schema.yaml
 /schema.json
 /api/uploads/
-/api/extensions/
+# Ignore built extensions but keep source code
+/api/extensions/*/dist/
+/api/extensions/*/node_modules/
+# Include custom extensions source code
+!/api/extensions/
 /tests/blackbox/uploads/
 /tests/blackbox/server-log-*
 /tests/blackbox/sequencer-data.json
