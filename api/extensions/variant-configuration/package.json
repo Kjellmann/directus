@@ -1,9 +1,9 @@
 {
   "name": "directus-extension-variant-configuration",
   "version": "1.0.0",
-  "description": "Interface for configuring product variant options",
+  "description": "Complete variant generation system: interface, hooks, and endpoints",
   "directus:extension": {
-    "type": "interface",
+    "type": "bundle",
     "path": "dist/index.js",
     "source": "src/index.ts",
     "host": "^11.0.0"

@@ -1,5 +1,5 @@
 import type { HookConfig } from '@directus/extensions';
-import { VariantGeneratorService } from '../variant-configuration/src/variant-generator-service';
+import { VariantGeneratorService } from './variant-generator-service';
 
 const registerHook: HookConfig = ({ action, filter }, { services, getSchema, database, logger }) => {
 	// Helper function to get variant generator service
