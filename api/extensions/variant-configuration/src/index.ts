@@ -1,10 +1,7 @@
-import { defineInterface, defineEndpoint, defineHook } from '@directus/extensions-sdk';
+import { defineInterface } from '@directus/extensions-sdk';
 import InterfaceComponent from './interface.vue';
-import endpoints from './endpoint';
-import hooks from './hooks';
 
-// Interface definition
-const interfaceDefinition = defineInterface({
+export default defineInterface({
 	id: 'variant-configuration',
 	name: 'Variant Configuration',
 	icon: 'auto_awesome',
@@ -41,16 +38,3 @@ const interfaceDefinition = defineInterface({
 	],
 	recommendedDisplays: ['raw'],
 });
-
-// Export bundle
-export default {
-	interfaces: {
-		'variant-configuration': interfaceDefinition,
-	},
-	endpoints: {
-		'variant-generator': defineEndpoint(endpoints),
-	},
-	hooks: {
-		'variant-generator-hooks': defineHook(hooks),
-	},
-};

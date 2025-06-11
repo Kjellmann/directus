@@ -1,15 +1,15 @@
 {
-  "name": "directus-extension-variant-configuration",
+  "name": "directus-extension-variant-generator-hooks",
   "version": "1.0.0",
-  "description": "Complete variant generation system: interface, hooks, and endpoints",
+  "description": "Database hooks for automatic variant generation",
   "type": "module",
   "keywords": [
     "directus",
     "directus-extension",
-    "directus-extension-bundle"
+    "directus-extension-hook"
   ],
   "directus:extension": {
-    "type": "interface",
+    "type": "hook",
     "path": "dist/index.js",
     "source": "src/index.ts",
     "host": "^11.0.0"
@@ -20,12 +20,6 @@
   },
   "devDependencies": {
     "@directus/extensions-sdk": "^11.0.0",
-    "@types/node": "^18.17.0",
-    "typescript": "^5.1.6",
-    "vue": "^3.3.4"
-  },
-  "dependencies": {
-    "@directus/types": "^11.0.0",
-    "sass": "^1.89.1"
+    "typescript": "^5.0.0"
   }
 }
