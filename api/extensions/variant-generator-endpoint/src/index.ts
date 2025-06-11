@@ -1,5 +1,5 @@
 import type { EndpointConfig } from '@directus/extensions';
-import { VariantGeneratorService } from './variant-generator-service';
+import { VariantGeneratorService } from '../variant-configuration/src/variant-generator-service';
 
 const endpoints: EndpointConfig = {
 	id: 'variant-generator',
