@@ -712,20 +712,20 @@ export default defineComponent({
 				valueFromInjected: formValues.value?.['family_variant'],
 			});
 
-			// 1. First try explicit prop
-			if (props.familyVariantValue) {
+			// 1. First try explicit prop (but check for empty string)
+			if (props.familyVariantValue && props.familyVariantValue !== '') {
 				console.log('Using familyVariantValue prop:', props.familyVariantValue);
 				return props.familyVariantValue;
 			}
 
-			// 2. Try from injected form values (current form data)
-			if (formValues.value && formValues.value['family_variant']) {
+			// 2. Try from injected form values (current form data) - check for empty string
+			if (formValues.value && formValues.value['family_variant'] && formValues.value['family_variant'] !== '') {
 				console.log('Using injected form value:', formValues.value['family_variant']);
 				return formValues.value['family_variant'];
 			}
 
-			// 3. Try from props values (fallback)
-			if (props.values && props.values['family_variant']) {
+			// 3. Try from props values (fallback) - check for empty string
+			if (props.values && props.values['family_variant'] && props.values['family_variant'] !== '') {
 				console.log('Using props value:', props.values['family_variant']);
 				return props.values['family_variant'];
 			}
@@ -759,7 +759,7 @@ export default defineComponent({
 
 		// Load variant axes and available options
 		async function loadVariantConfiguration() {
-			if (!familyVariant.value) return;
+			if (!familyVariant.value || familyVariant.value === '') return;
 
 			loading.value = true;
 			try {

@@ -356,14 +356,6 @@ export function useAttributeValues() {
 			return attribute.default_value;
 		}
 
-		if (attribute.type.input_interface === 'table') {
-			return [];
-		}
-
-		if (attribute.type.input_interface === 'yes_no') {
-			return false;
-		}
-
 		return null;
 	}
 

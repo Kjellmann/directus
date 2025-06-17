@@ -543,8 +543,6 @@ async function initializeRelationData(): Promise<void> {
 
 	let fetchedProductAttributes: AttributeValueItem[] = [];
 
-	console.log('props.value', props.value);
-	console.log('familyAttributes.value', familyAttributes.value);
 	if (props.value && Array.isArray(props.value) && props.value.length > 0) {
 		const firstItem = props.value[0];
 		if (typeof firstItem === 'number' || typeof firstItem === 'string') {

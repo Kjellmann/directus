@@ -1,0 +1,31 @@
+{
+  "name": "product-grid-layout",
+  "version": "1.0.0",
+  "description": "Custom product grid with dynamic attribute support",
+  "icon": "grid_view",
+  "keywords": [
+    "directus",
+    "directus-extension",
+    "directus-extension-layout"
+  ],
+  "type": "module",
+  "directus:extension": {
+    "type": "layout",
+    "path": "dist/index.js",
+    "source": "src/index-with-api.ts",
+    "host": "^10.0.0"
+  },
+  "scripts": {
+    "build": "directus-extension build",
+    "dev": "directus-extension build -w --no-minify"
+  },
+  "dependencies": {
+    "vuedraggable": "^4.1.0"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "^10.0.0",
+    "typescript": "^5.0.0",
+    "vue": "^3.3.0",
+    "vue-i18n": "^9.0.0"
+  }
+}
