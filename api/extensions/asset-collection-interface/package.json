@@ -1,0 +1,31 @@
+{
+  "name": "directus-extension-asset-collection-interface",
+  "version": "1.0.0",
+  "description": "Asset collection interface for managing product assets",
+  "type": "module",
+  "keywords": [
+    "directus",
+    "directus-extension",
+    "directus-extension-bundle"
+  ],
+  "directus:extension": {
+    "type": "interface",
+    "path": "dist/index.js",
+    "source": "src/index.ts",
+    "host": "^11.0.0"
+  },
+  "scripts": {
+    "build": "directus-extension build",
+    "dev": "directus-extension build -w --no-minify"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "^11.0.0",
+    "@types/node": "^18.17.0",
+    "typescript": "^5.1.6",
+    "vue": "^3.3.4"
+  },
+  "dependencies": {
+    "@directus/types": "^11.0.0",
+    "sass": "^1.89.1"
+  }
+}

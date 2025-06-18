@@ -3,199 +3,255 @@ import { defineEndpoint } from '@directus/extensions-sdk';
 export default defineEndpoint({
   id: 'product-grid',
   handler: (router, context) => {
-    const { services, database, logger } = context;
+    const { services, getSchema, logger, database } = context;
+    const { ItemsService } = services;
 
     // Enhanced products endpoint with attribute filtering/sorting
     router.get('/products', async (req, res) => {
       try {
+        // Get schema for database operations
+        const schema = await getSchema();
+        const accountability = req.accountability;
+        
         const {
           limit = 25,
-          offset = 0,
+          page = 1,
           sort,
           search,
-          filter = {},
-          attribute_filters,
-          fields = []
+          filter,
+          attribute_filters
         } = req.query;
-
-        let query = database('products').select('products.*');
         
-        // Apply standard filters
-        if (filter && typeof filter === 'object') {
-          Object.entries(filter).forEach(([field, condition]) => {
-            if (typeof condition === 'object' && condition._contains) {
-              query = query.where(field, 'like', `%${condition._contains}%`);
-            } else if (typeof condition === 'object' && condition._eq) {
-              query = query.where(field, '=', condition._eq);
-            }
+        // Calculate offset from page
+        const offset = (Number(page) - 1) * Number(limit);
+        
+        // Parse filter if it's a string
+        const parsedFilter = filter && typeof filter === 'string' ? JSON.parse(filter) : filter || {};
+        
+        // Create products service
+        const productsService = new ItemsService('products', { schema, accountability });
+        
+        // Parse sort field
+        let sortField = sort ? String(sort) : '-date_created';
+        let sortDirection = sortField.startsWith('-') ? 'DESC' : 'ASC';
+        if (sortField.startsWith('-')) {
+          sortField = sortField.substring(1);
+        }
+        
+        // Check if sorting by an attribute field
+        const isAttributeSort = sortField.startsWith('attr_');
+        const attributeCode = isAttributeSort ? sortField.substring(5) : null;
+        
+        // Build query - always get all data if we need attribute sorting later
+        let products;
+        let total;
+        let needsAttributeSort = isAttributeSort;
+        
+        const query = {
+          limit: needsAttributeSort ? -1 : Number(limit),
+          offset: needsAttributeSort ? 0 : offset,
+          sort: needsAttributeSort ? ['-date_created'] : (sort ? [sort] : ['-date_created']),
+          filter: parsedFilter,
+          search: search ? String(search) : undefined,
+          fields: ['*']
+        };
+        
+        logger.info('Products query:', JSON.stringify(query));
+        
+        // Get products
+        products = await productsService.readByQuery(query);
+        
+        logger.info(`Products found: ${products.length}`);
+        
+        // Get total count
+        if (needsAttributeSort) {
+          // We'll count after filtering
+          total = 0; // Will be set later
+        } else {
+          const aggregateResult = await productsService.readByQuery({
+            aggregate: { count: ['*'] },
+            filter: parsedFilter,
+            search: search ? String(search) : undefined
           });
-        }
-
-        // Apply attribute filters
-        if (attribute_filters) {
-          const attrFilters = JSON.parse(attribute_filters);
           
-          for (const [attrCode, value] of Object.entries(attrFilters)) {
-            if (value === null || value === '') continue;
-            
-            // Handle range filters
-            if (attrCode.endsWith('_min') || attrCode.endsWith('_max')) {
-              const baseCode = attrCode.replace(/_min|_max$/, '');
-              const isMin = attrCode.endsWith('_min');
-              
-              query = query.whereIn('products.id', function() {
-                this.select('product_id')
-                  .from('product_attributes')
-                  .join('attributes', 'product_attributes.attribute_id', 'attributes.id')
-                  .where('attributes.code', baseCode)
-                  .whereRaw(
-                    `CAST(JSON_UNQUOTE(JSON_EXTRACT(value, '$.value')) AS DECIMAL) ${isMin ? '>=' : '<='} ?`,
-                    [value]
-                  );
-              });
-            } else {
-              // Regular attribute filter
-              query = query.whereIn('products.id', function() {
-                this.select('product_id')
-                  .from('product_attributes')
-                  .join('attributes', 'product_attributes.attribute_id', 'attributes.id')
-                  .where('attributes.code', attrCode)
-                  .where(function() {
-                    if (typeof value === 'string') {
-                      this.whereRaw(
-                        `JSON_UNQUOTE(JSON_EXTRACT(value, '$.value')) LIKE ?`,
-                        [`%${value}%`]
-                      );
-                    } else {
-                      this.whereRaw(
-                        `JSON_UNQUOTE(JSON_EXTRACT(value, '$.value')) = ?`,
-                        [value]
-                      );
-                    }
-                  });
-              });
-            }
-          }
-        }
-
-        // Apply search
-        if (search) {
-          // Get searchable attributes
-          const searchableAttrs = await database('attributes')
-            .where('is_searchable', true)
-            .select('id', 'code');
-          
-          query = query.where(function() {
-            // Search in standard fields
-            this.where('products.id', 'like', `%${search}%`)
-              .orWhere('products.uuid', 'like', `%${search}%`);
-            
-            // Search in searchable attributes
-            if (searchableAttrs.length > 0) {
-              this.orWhereIn('products.id', function() {
-                this.select('product_id')
-                  .from('product_attributes')
-                  .whereIn('attribute_id', searchableAttrs.map(a => a.id))
-                  .whereRaw(
-                    `JSON_UNQUOTE(JSON_EXTRACT(value, '$.value')) LIKE ?`,
-                    [`%${search}%`]
-                  );
-              });
-            }
-          });
-        }
-
-        // Get total count - use a separate query
-        const countQuery = database('products').count('* as total');
-        
-        // Apply same filters to count query
-        if (filter && typeof filter === 'object') {
-          Object.entries(filter).forEach(([field, condition]) => {
-            if (typeof condition === 'object' && condition._contains) {
-              countQuery.where(field, 'like', `%${condition._contains}%`);
-            } else if (typeof condition === 'object' && condition._eq) {
-              countQuery.where(field, '=', condition._eq);
-            }
-          });
+          total = aggregateResult?.[0]?.count || 0;
         }
         
-        const [{ total }] = await countQuery;
-
-        // Apply sorting
-        if (sort) {
-          const sortField = sort.startsWith('-') ? sort.substring(1) : sort;
-          const sortDir = sort.startsWith('-') ? 'desc' : 'asc';
-          
-          if (sortField.startsWith('attr_')) {
-            // Attribute sorting
-            const attrCode = sortField.replace('attr_', '');
-            query = query
-              .leftJoin('product_attributes as pa_sort', function() {
-                this.on('products.id', '=', 'pa_sort.product_id');
-              })
-              .leftJoin('attributes as a_sort', function() {
-                this.on('pa_sort.attribute_id', '=', 'a_sort.id')
-                  .andOn('a_sort.code', '=', database.raw('?', [attrCode]));
-              })
-              .orderByRaw(`JSON_UNQUOTE(JSON_EXTRACT(pa_sort.value, '$.value')) ${sortDir}`);
-          } else {
-            query = query.orderBy(sortField, sortDir);
-          }
-        }
-
-        // Apply pagination
-        query = query.limit(limit).offset(offset);
-
-        // Execute query
-        const products = await query;
-        
-        // Add attribute values to products
+        // Get product assets if products found
         if (products.length > 0) {
-          // Get searchable attributes
-          const attributes = await database('attributes')
-            .where('is_searchable', true)
-            .select('id', 'code', 'label');
-          
-          if (attributes.length > 0) {
-            // Get attribute values for these products
-            const values = await database('product_attributes')
-              .whereIn('product_id', products.map(p => p.id))
-              .whereIn('attribute_id', attributes.map(a => a.id))
-              .select('product_id', 'attribute_id', 'value');
+          try {
+            // Create services for related data
+            const productAssetsService = new ItemsService('product_assets', { schema, accountability });
+            const assetsService = new ItemsService('assets', { schema, accountability });
+            const filesService = new ItemsService('directus_files', { schema, accountability });
             
-            // Build value map
-            const valueMap = new Map();
-            values.forEach(v => {
-              const key = `${v.product_id}_${v.attribute_id}`;
-              try {
-                const parsed = JSON.parse(v.value);
-                valueMap.set(key, parsed?.value ?? parsed);
-              } catch {
-                valueMap.set(key, v.value);
+            // Get product assets for these products
+            const productAssets = await productAssetsService.readByQuery({
+              filter: {
+                products_id: { _in: products.map(p => p.id) }
+              },
+              fields: ['*', 'assets_id.*', 'assets_id.media_file'],
+              sort: ['sort'],
+              limit: -1
+            });
+            
+            logger.info(`Found product assets: ${productAssets.length}`);
+            
+            // Log structure of first asset to understand the data
+            if (productAssets.length > 0) {
+              logger.info('First asset structure:', JSON.stringify(productAssets[0], null, 2));
+            }
+            
+            // Group assets by product
+            const assetMap = new Map();
+            productAssets.forEach(pa => {
+              if (!assetMap.has(pa.products_id)) {
+                assetMap.set(pa.products_id, []);
+              }
+              assetMap.get(pa.products_id).push(pa);
+            });
+            
+            // Add assets to products and set primary image directly
+            products.forEach((product, index) => {
+              const assets = assetMap.get(product.id) || [];
+              product.product_assets = assets;
+              
+              // Find first asset with media file
+              // The assets_id is already expanded and contains media_file as a string ID
+              const imageAsset = assets.find(pa => pa.assets_id?.media_file);
+              
+              if (imageAsset?.assets_id?.media_file) {
+                // media_file is already the file ID we need
+                product.primary_image = imageAsset.assets_id.media_file;
+                
+                // Debug log for SKU 10000132
+                if (product.id === 'ea4c19a9-bb4a-417b-b8db-49842c252619') {
+                  logger.info(`Product SKU 10000132: Set primary_image to ${product.primary_image}`);
+                }
+              } else {
+                product.primary_image = null;
               }
             });
             
-            // Add attribute values to products
-            products.forEach(product => {
-              attributes.forEach(attr => {
-                const key = `${product.id}_${attr.id}`;
-                product[`attr_${attr.code}`] = valueMap.get(key) ?? null;
+            // Get searchable attributes
+            const attributesService = new ItemsService('attributes', { schema, accountability });
+            const attributes = await attributesService.readByQuery({
+              filter: { is_searchable: true },
+              fields: ['id', 'code', 'label'],
+              limit: -1
+            });
+            
+            logger.info(`Found searchable attributes: ${attributes.length}`);
+            
+            if (attributes.length > 0) {
+              // Get attribute values
+              const productAttributesService = new ItemsService('product_attributes', { schema, accountability });
+              const attrValues = await productAttributesService.readByQuery({
+                filter: {
+                  product_id: { _in: products.map(p => p.id) },
+                  attribute_id: { _in: attributes.map(a => a.id) }
+                },
+                fields: ['product_id', 'attribute_id', 'value'],
+                limit: -1
               });
+              
+              logger.info(`Found attribute values: ${attrValues.length}`);
+              if (attrValues.length > 0) {
+                logger.info('First attribute value:', JSON.stringify(attrValues[0]));
+              }
+              
+              // Build value map
+              const valueMap = new Map();
+              attrValues.forEach(v => {
+                const key = `${v.product_id}_${v.attribute_id}`;
+                try {
+                  const parsed = JSON.parse(v.value);
+                  valueMap.set(key, parsed?.value ?? parsed);
+                } catch {
+                  valueMap.set(key, v.value);
+                }
+              });
+              
+              // Add attribute values to products
+              products.forEach((product, index) => {
+                attributes.forEach(attr => {
+                  const key = `${product.id}_${attr.id}`;
+                  const value = valueMap.get(key);
+                  product[`attr_${attr.code}`] = value ?? null;
+                });
+                
+                // Debug product with SKU 10000132
+                if (product[`attr_sku`] === 10000132 || product[`attr_sku`] === '10000132') {
+                  logger.info(`Found product SKU 10000132: ID=${product.id}, primary_image=${product.primary_image}`);
+                  if (product.product_assets && product.product_assets.length > 0) {
+                    logger.info(`SKU 10000132 assets: ${JSON.stringify(product.product_assets)}`);
+                  }
+                }
+              });
+            }
+          } catch (error) {
+            logger.warn('Failed to load related data:', error);
+            // Continue without assets
+            products.forEach(product => {
+              product.product_assets = [];
+              product.primary_image = null;
             });
           }
+        }
+        
+        // Handle attribute sorting if needed
+        if (needsAttributeSort && attributeCode) {
+          logger.info(`Sorting by attribute: ${attributeCode} ${sortDirection}`);
+          
+          // Sort products by the specific attribute value
+          products.sort((a, b) => {
+            const aVal = a[`attr_${attributeCode}`];
+            const bVal = b[`attr_${attributeCode}`];
+            
+            // Handle null/undefined values - put them last for ASC, first for DESC
+            if (aVal === null || aVal === undefined) return sortDirection === 'ASC' ? 1 : -1;
+            if (bVal === null || bVal === undefined) return sortDirection === 'ASC' ? -1 : 1;
+            
+            // Try to parse as numbers first (for SKUs like "10000101" or numeric values)
+            const aNum = Number(aVal);
+            const bNum = Number(bVal);
+            
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+              // Both are valid numbers
+              return sortDirection === 'ASC' ? aNum - bNum : bNum - aNum;
+            }
+            
+            // Fall back to string comparison
+            const aStr = String(aVal).toLowerCase();
+            const bStr = String(bVal).toLowerCase();
+            
+            // Use natural sort for alphanumeric strings (e.g., "M10000115" vs "10000101")
+            return sortDirection === 'ASC' 
+              ? aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' })
+              : bStr.localeCompare(aStr, undefined, { numeric: true, sensitivity: 'base' });
+          });
+          
+          // Get total after sorting (before pagination)
+          total = products.length;
+          
+          // Apply pagination
+          const start = (Number(page) - 1) * Number(limit);
+          products = products.slice(start, start + Number(limit));
+          
+          logger.info(`Applied attribute sorting and pagination: showing ${products.length} of ${total} products`);
         }
 
         res.json({
           data: products,
           meta: {
-            total_count: total
+            total_count: Number(total)
           }
         });
       } catch (error) {
         logger.error('Product grid error:', error);
         res.status(500).json({ 
           error: 'Failed to load products',
-          message: error.message 
+          message: error.message
         });
       }
     });
@@ -203,22 +259,33 @@ export default defineEndpoint({
     // Export endpoint
     router.get('/products/export', async (req, res) => {
       try {
+        const schema = await getSchema();
+        const accountability = req.accountability;
         const { format = 'csv', include_attributes = true } = req.query;
 
         // Get all products
-        const products = await database('products').select('*');
+        const productsService = new ItemsService('products', { schema, accountability });
+        const products = await productsService.readByQuery({ limit: -1 });
 
         if (include_attributes === 'true') {
           // Get all grid-enabled attributes
-          const attributes = await database('attributes')
-            .where('usable_in_grid', true)
-            .select('id', 'code', 'label');
+          const attributesService = new ItemsService('attributes', { schema, accountability });
+          const attributes = await attributesService.readByQuery({
+            filter: { usable_in_grid: true },
+            fields: ['id', 'code', 'label'],
+            limit: -1
+          });
 
           // Get all attribute values
-          const values = await database('product_attributes')
-            .whereIn('product_id', products.map(p => p.id))
-            .whereIn('attribute_id', attributes.map(a => a.id))
-            .select('product_id', 'attribute_id', 'value');
+          const productAttributesService = new ItemsService('product_attributes', { schema, accountability });
+          const values = await productAttributesService.readByQuery({
+            filter: {
+              product_id: { _in: products.map(p => p.id) },
+              attribute_id: { _in: attributes.map(a => a.id) }
+            },
+            fields: ['product_id', 'attribute_id', 'value'],
+            limit: -1
+          });
 
           // Build value map
           const valueMap = new Map();

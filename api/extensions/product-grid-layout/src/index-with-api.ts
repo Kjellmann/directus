@@ -2,21 +2,22 @@ import { defineLayout } from '@directus/extensions-sdk';
 import { useCollection } from '@directus/extensions-sdk';
 import { computed, ref, toRefs, watch, inject } from 'vue';
 import TabularEnhanced from './tabular-enhanced-v2.vue';
+import ProductGridOptions from './options.vue';
+import { useProductClickHandler } from './composables/use-product-click-handler';
 
 export default defineLayout({
   id: 'product-grid',
-  name: 'Product Grid',
+  name: 'Product Grid', // Unfortunately, can't use dynamic translations here
   icon: 'grid_view',
   component: TabularEnhanced,
   slots: {
-    options: () => null,
+    options: ProductGridOptions,
     sidebar: () => null,
     actions: () => null
   },
-  emits: ['clickRow', 'update:selection', 'update:layoutOptions', 'update:layoutQuery'],
   setup(props, { emit }) {
     const { collection, filter, search } = toRefs(props);
-    const api = inject('api');
+    const api = inject('api') as any;
     
     // Get collection info
     const { primaryKeyField, fields: fieldsInCollection, info, sortField } = useCollection(collection);
@@ -36,7 +37,14 @@ export default defineLayout({
     });
     
     const layoutOptions = computed({
-      get: () => props.layoutOptions || {},
+      get: () => {
+        const options = props.layoutOptions || {};
+        return {
+          spacing: options.spacing || 'cozy',
+          viewMode: options.viewMode || 'list',
+          ...options
+        };
+      },
       set: (val) => emit('update:layoutOptions', val)
     });
     
@@ -86,16 +94,12 @@ export default defineLayout({
           filter: filter.value ? JSON.stringify(filter.value) : undefined
         };
         
-        console.log('[Product Grid] Loading items with params:', params);
-        
         const response = await api.get('/product-grid/products', { params });
         
         items.value = response.data.data || [];
-        totalCount.value = response.data.meta?.total || 0;
-        itemCount.value = response.data.data?.length || 0;
+        totalCount.value = response.data.meta?.total_count || 0;
+        itemCount.value = totalCount.value;
         totalPages.value = Math.ceil(totalCount.value / limit.value);
-        
-        console.log('[Product Grid] Loaded items:', items.value.length);
       } catch (err) {
         console.error('[Product Grid] Error loading items:', err);
         error.value = err;
@@ -114,6 +118,33 @@ export default defineLayout({
         return { by: sort.value[0].substring(1), desc: true };
       } else {
         return { by: sort.value[0], desc: false };
+      }
+    });
+    
+    // Layout configuration
+    const spacing = computed({
+      get: () => layoutOptions.value.spacing || 'cozy',
+      set: (val) => {
+        layoutOptions.value = { ...layoutOptions.value, spacing: val };
+      }
+    });
+    
+    const viewMode = computed({
+      get: () => layoutOptions.value.viewMode || 'list',
+      set: (val) => {
+        layoutOptions.value = { ...layoutOptions.value, viewMode: val };
+      }
+    });
+    
+    const tableRowHeight = computed(() => {
+      switch (spacing.value) {
+        case 'compact':
+          return 32;
+        case 'cozy':
+        default:
+          return 80;
+        case 'comfortable':
+          return 64;
       }
     });
     
@@ -149,11 +180,14 @@ export default defineLayout({
       sort.value = [sortString];
     }
     
-    function onRowClick({ item, event }: any) {
-      if (props.readonly) return;
-      const primaryKey = item[primaryKeyField.value?.field || 'id'];
-      emit('clickRow', { item, event, primaryKey });
-    }
+    // Use the Directus-style click handler
+    const { onClick: onRowClick } = useProductClickHandler(
+      collection,
+      primaryKeyField,
+      selection,
+      props.selectMode || false,
+      props.readonly || false
+    );
     
     function selectAll() {
       if (!primaryKeyField.value || !items.value) return;
@@ -173,7 +207,9 @@ export default defineLayout({
       // Table config
       tableHeaders,
       tableSort,
-      tableRowHeight: 48,
+      tableRowHeight,
+      spacing,
+      viewMode,
       
       // Collection info
       collection: collection.value,
@@ -189,24 +225,24 @@ export default defineLayout({
       selectAll,
       
       // Pagination
-      page: page.value,
-      limit: limit.value,
+      page,
+      limit,
       
       // Selection
-      selection: selection.value,
+      selection,
       showSelect: props.selectMode ? 'multiple' : 'none',
       readonly: props.readonly || false,
       
       // Search/filter
-      search: search.value,
-      filter: filter.value,
+      search,
+      filter,
       sortField,
       
       // Flag to indicate we're using the API
       useCustomApi: true,
       
       // Layout options for persistence
-      layoutOptions: layoutOptions.value
+      layoutOptions
     };
   }
 });

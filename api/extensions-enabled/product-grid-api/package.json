@@ -1,0 +1,25 @@
+{
+  "name": "product-grid-api",
+  "version": "1.0.0",
+  "description": "API endpoints for product grid with attribute support",
+  "keywords": [
+    "directus",
+    "directus-extension",
+    "directus-extension-endpoint"
+  ],
+  "type": "module",
+  "directus:extension": {
+    "type": "endpoint",
+    "path": "dist/index.js",
+    "source": "src/index.ts",
+    "host": "^10.0.0"
+  },
+  "scripts": {
+    "build": "directus-extension build",
+    "dev": "directus-extension build -w --no-minify"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "^10.0.0",
+    "typescript": "^5.0.0"
+  }
+}

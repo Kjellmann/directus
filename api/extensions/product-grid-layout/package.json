@@ -20,6 +20,7 @@
     "dev": "directus-extension build -w --no-minify"
   },
   "dependencies": {
+    "sass": "^1.89.2",
     "vuedraggable": "^4.1.0"
   },
   "devDependencies": {

@@ -3,9 +3,9 @@ import InterfaceComponent from './interface.vue';
 
 export default defineInterface({
 	id: 'm2o-searchable-dropdown',
-	name: 'M2O Searchable Dropdown',
+	name: '$t:interfaces.m2o_searchable_dropdown.name',
 	icon: 'arrow_drop_down_circle',
-	description: 'Select a related item from a searchable dropdown',
+	description: '$t:interfaces.m2o_searchable_dropdown.description',
 	component: InterfaceComponent,
 	types: ['uuid', 'string', 'text', 'integer', 'bigInteger'],
 	localTypes: ['m2o'],
@@ -27,13 +27,13 @@ export default defineInterface({
 			},
 			{
 				field: 'placeholder',
-				name: 'Placeholder',
+				name: '$t:placeholder',
 				type: 'string',
 				meta: {
 					interface: 'input',
 					width: 'half',
 					options: {
-						placeholder: 'Enter a placeholder',
+						placeholder: '$t:enter_a_placeholder',
 					},
 				},
 			},
