@@ -6,13 +6,6 @@
 
 		<div v-else-if="!familyVariant" class="no-family-variant">
 			<v-notice type="info">Select a family variant to configure variant options</v-notice>
-			<div style="margin-top: 10px; font-size: 12px; color: #666">
-				Debug: familyVariant={{ familyVariant }}
-				<br />
-				Props values={{ JSON.stringify(values) }}
-				<br />
-				Injected values={{ JSON.stringify(formValues) }}
-			</div>
 		</div>
 
 		<v-detail v-else v-model="configurationDetailOpen" :start-open="true" class="configuration-container">
@@ -325,7 +318,11 @@
 						>
 							<div class="variant-image">
 								<v-avatar :small="true">
-									<v-image v-if="variant.image" :src="getImageUrl(variant.image)" :alt="variant.name || 'Variant image'" />
+									<v-image
+										v-if="variant.image"
+										:src="getImageUrl(variant.image)"
+										:alt="variant.name || 'Variant image'"
+									/>
 									<v-icon v-else name="inventory_2" />
 								</v-avatar>
 							</div>
@@ -364,11 +361,7 @@
 									</div>
 								</div>
 								<div class="variant-attributes">
-									<v-chip
-										v-for="attr in variant.displayAttributes"
-										:key="attr.code"
-										:x-small="true"
-									>
+									<v-chip v-for="attr in variant.displayAttributes" :key="attr.code" :x-small="true">
 										{{ attr.label }}
 									</v-chip>
 								</div>
@@ -408,7 +401,7 @@
 
 		<!-- File picker dialog -->
 		<v-dialog v-model="filePickerActive" persistent>
-			<v-card style="min-width: 800px; min-height: 600px;">
+			<v-card style="min-width: 800px; min-height: 600px">
 				<v-card-title>
 					{{ t('Select Image') }}
 					<v-button secondary icon @click="filePickerActive = false">
@@ -423,15 +416,9 @@
 								<v-icon name="cloud_upload" />
 								{{ t('Upload New Image') }}
 							</v-button>
-							<input
-								ref="fileInput"
-								type="file"
-								accept="image/*"
-								style="display: none"
-								@change="handleFileUpload"
-							/>
+							<input ref="fileInput" type="file" accept="image/*" style="display: none" @change="handleFileUpload" />
 						</div>
-						
+
 						<!-- Recent files list (simplified) -->
 						<div v-if="recentFiles.length > 0" class="recent-files">
 							<h3>{{ t('Recent Images') }}</h3>
@@ -1031,7 +1018,9 @@ export default defineComponent({
 
 				const shouldOpen = await showConfirm(
 					t('Information'),
-					`${message}\n\n${t('Would you like to open the {collection} collection now?', { collection: referenceCollection })}`
+					`${message}\n\n${t('Would you like to open the {collection} collection now?', {
+						collection: referenceCollection,
+					})}`,
 				);
 				if (shouldOpen) {
 					window.open(collectionPath, '_blank');
@@ -1045,7 +1034,7 @@ export default defineComponent({
 
 				const shouldOpen = await showConfirm(
 					t('Information'),
-					`${message}\n\n${t('Would you like to open the Attribute Options collection now?')}`
+					`${message}\n\n${t('Would you like to open the Attribute Options collection now?')}`,
 				);
 				if (shouldOpen) {
 					window.open(collectionPath, '_blank');
@@ -1113,7 +1102,7 @@ export default defineComponent({
 		async function regenerateVariants() {
 			const shouldRegenerate = await showConfirm(
 				t('Confirm'),
-				t('This will delete existing variants and create new ones. Continue?')
+				t('This will delete existing variants and create new ones. Continue?'),
 			);
 			if (shouldRegenerate) {
 				regenerating.value = true;
@@ -1148,10 +1137,10 @@ export default defineComponent({
 			try {
 				currentVariant.value = variant;
 				selectedFileId.value = variant.image || null;
-				
+
 				// Load recent image files
 				await loadRecentFiles();
-				
+
 				// Open the file picker dialog
 				filePickerActive.value = true;
 			} catch (error) {
@@ -1166,13 +1155,13 @@ export default defineComponent({
 				const response = await api.get('/files', {
 					params: {
 						filter: {
-							type: { _starts_with: 'image/' }
+							type: { _starts_with: 'image/' },
 						},
 						sort: ['-uploaded_on'],
-						limit: 20
-					}
+						limit: 20,
+					},
 				});
-				
+
 				recentFiles.value = response.data?.data || [];
 			} catch (error) {
 				console.error('Error loading recent files:', error);
@@ -1189,14 +1178,14 @@ export default defineComponent({
 		async function handleFileUpload(event: Event) {
 			const target = event.target as HTMLInputElement;
 			const file = target.files?.[0];
-			
+
 			if (!file) return;
-			
+
 			try {
 				// Upload the file to Directus
 				const formData = new FormData();
 				formData.append('file', file);
-				
+
 				const uploadResponse = await api.post('/files', formData, {
 					headers: {
 						'Content-Type': 'multipart/form-data',
@@ -1206,14 +1195,14 @@ export default defineComponent({
 				if (uploadResponse.data?.data?.id) {
 					const newFileId = uploadResponse.data.data.id;
 					selectedFileId.value = newFileId;
-					
+
 					// Add to recent files
 					recentFiles.value.unshift({
 						id: newFileId,
 						title: file.name,
-						type: file.type
+						type: file.type,
 					});
-					
+
 					showNotification('success', t('Image uploaded successfully'));
 				} else {
 					throw new Error('No file ID returned from upload');
@@ -1222,7 +1211,7 @@ export default defineComponent({
 				console.error('Upload error:', error);
 				showNotification('error', t('Failed to upload image'));
 			}
-			
+
 			// Reset input
 			if (target) target.value = '';
 		}
@@ -1238,7 +1227,7 @@ export default defineComponent({
 				currentVariant.value.image = selectedFileId.value;
 				showNotification('success', t('Image selected for variant'));
 			}
-			
+
 			filePickerActive.value = false;
 			selectedFileId.value = null;
 			currentVariant.value = null;
@@ -1637,7 +1626,13 @@ export default defineComponent({
 							parent_product_id: props.primaryKey,
 							product_type: 'simple',
 						},
-						fields: ['*', 'attributes.*', 'attributes.attribute_id.*', 'products_product_images.*', 'products_product_images.product_images_id.*'],
+						fields: [
+							'*',
+							'attributes.*',
+							'attributes.attribute_id.*',
+							'products_product_images.*',
+							'products_product_images.product_images_id.*',
+						],
 						sort: ['-date_created'],
 					},
 				});
@@ -1746,10 +1741,7 @@ export default defineComponent({
 		}
 
 		async function deleteVariant(variant: any) {
-			const shouldDelete = await showConfirm(
-				t('Confirm Delete'),
-				t('Are you sure you want to delete this variant?')
-			);
+			const shouldDelete = await showConfirm(t('Confirm Delete'), t('Are you sure you want to delete this variant?'));
 			if (shouldDelete) {
 				try {
 					await api.delete(`/items/products/${variant.id}`);
@@ -1789,7 +1781,7 @@ export default defineComponent({
 		async function deleteAllVariants() {
 			const shouldDeleteAll = await showConfirm(
 				t('Confirm Delete All'),
-				t('Are you sure you want to delete all variants? This action cannot be undone.')
+				t('Are you sure you want to delete all variants? This action cannot be undone.'),
 			);
 			if (shouldDeleteAll) {
 				try {
@@ -2357,7 +2349,6 @@ export default defineComponent({
 	color: var(--theme--primary);
 	border: 1px solid var(--theme--primary);
 }
-
 
 .configuration-content,
 .linked-products-content {
