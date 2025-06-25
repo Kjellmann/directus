@@ -20,57 +20,6 @@
 
 	<!-- Table View -->
 	<template v-else>
-		<!-- Column selector -->
-		<v-menu v-model="columnMenuOpen" :close-on-content-click="false">
-			<template #activator="{ toggle }">
-				<v-button class="add-columns-button" icon small @click="toggle">
-					<v-icon name="view_column" />
-				</v-button>
-			</template>
-
-			<div class="column-selector">
-				<div class="column-selector-header">
-					<h3>{{ t('select_columns') }}</h3>
-					<v-input v-model="columnSearch" type="search" :placeholder="t('search')" prepend-icon="search" />
-				</div>
-
-				<div class="column-groups">
-					<!-- Standard fields -->
-					<div class="column-group">
-						<div class="column-group-header">{{ t('standard_fields') }}</div>
-						<v-checkbox
-							v-for="field in filteredStandardFields"
-							:key="field.value"
-							v-model="selectedColumns"
-							:value="field.value"
-							:label="field.text"
-						/>
-					</div>
-
-					<!-- Attribute fields -->
-					<div v-if="filteredAttributeFields.length > 0" class="column-group">
-						<div class="column-group-header">{{ t('attributes') }}</div>
-						<v-checkbox
-							v-for="field in filteredAttributeFields"
-							:key="field.value"
-							v-model="selectedColumns"
-							:value="field.value"
-							:label="field.text"
-						/>
-					</div>
-				</div>
-
-				<div class="column-selector-footer">
-					<v-button secondary @click="resetColumns">
-						{{ t('reset_to_default') }}
-					</v-button>
-					<v-button @click="applyColumns">
-						{{ t('apply') }}
-					</v-button>
-				</div>
-			</div>
-		</v-menu>
-
 		<!-- Table -->
 		<v-table
 			ref="tableRef"
@@ -165,17 +114,6 @@
 							{{ t('hide_field') }}
 						</v-list-item-content>
 					</v-list-item>
-
-					<v-divider />
-
-					<v-list-item clickable @click="openColumnSelector">
-						<v-list-item-icon>
-							<v-icon name="view_column" />
-						</v-list-item-icon>
-						<v-list-item-content>
-							{{ t('manage_columns') }}
-						</v-list-item-content>
-					</v-list-item>
 				</v-list>
 			</template>
 
@@ -190,7 +128,7 @@
 				<render-display
 					v-else-if="!isAttributeField(header.value)"
 					:value="item[header.value]"
-					:display="header.field?.display || null"
+					:display="getDisplayForValue(item[header.value], header.field)"
 					:options="header.field?.displayOptions || null"
 					:interface="header.field?.interface || null"
 					:interface-options="header.field?.interfaceOptions || null"
@@ -266,11 +204,13 @@ interface Props {
 	// Fields
 	primaryKeyField?: any;
 	availableFields?: any[];
-	attributes?: any[];
+	attributeList?: any[];
+	fields?: any[]; // Fields from the collection
 
 	// Layout options for persistence
 	layoutOptions?: any;
 	viewMode?: 'grid' | 'list';
+
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -287,7 +227,8 @@ const props = withDefaults(defineProps<Props>(), {
 	limit: 25,
 	readonly: false,
 	availableFields: () => [],
-	attributes: () => [],
+	attributeList: () => [],
+	fields: () => [],
 	viewMode: 'list',
 });
 
@@ -318,10 +259,6 @@ watch(
 
 // State
 const tableRef = ref();
-const columnMenuOpen = ref(false);
-const columnSearch = ref('');
-const selectedColumns = ref<string[]>([]);
-const isLoadingSavedState = ref(false);
 const pageSizes = ['25', '50', '100', '250', '500', '1000'];
 
 // Sync selection
@@ -336,54 +273,7 @@ const limitWritable = computed({
 	set: (val) => emit('update:limit', val),
 });
 
-// Type for field definitions
-interface FieldDefinition {
-	text: string;
-	value: string;
-	field: {
-		type: string;
-		interface?: string;
-		display?: string;
-		displayOptions?: any;
-		interfaceOptions?: any;
-	};
-	standard?: boolean;
-	attribute?: boolean;
-}
 
-// All available fields
-const allAvailableFields = computed<FieldDefinition[]>(() => {
-	const standardFields: FieldDefinition[] = [
-		{ text: 'ID', value: 'id', field: { type: 'string' }, standard: true },
-		{ text: 'UUID', value: 'uuid', field: { type: 'string' }, standard: true },
-		{ text: 'Image', value: 'primary_image', field: { type: 'file', interface: 'file-image' }, standard: true },
-		{ text: 'Enabled', value: 'enabled', field: { type: 'boolean', interface: 'boolean' }, standard: true },
-		{ text: 'Product Type', value: 'product_type', field: { type: 'string' }, standard: true },
-		{ text: 'Family', value: 'family', field: { type: 'integer' }, standard: true },
-		{ text: 'Created', value: 'date_created', field: { type: 'timestamp', interface: 'datetime' }, standard: true },
-		{ text: 'Updated', value: 'date_updated', field: { type: 'timestamp', interface: 'datetime' }, standard: true },
-	];
-
-	const attributeFields: FieldDefinition[] = props.attributes.map((attr) => ({
-		text: attr.label,
-		value: `attr_${attr.code}`,
-		field: { type: 'alias' },
-		attribute: true,
-	}));
-
-	return [...standardFields, ...attributeFields];
-});
-
-// Filtered fields based on search
-const filteredStandardFields = computed(() => {
-	const search = columnSearch.value.toLowerCase();
-	return allAvailableFields.value.filter((f) => f.standard && f.text.toLowerCase().includes(search));
-});
-
-const filteredAttributeFields = computed(() => {
-	const search = columnSearch.value.toLowerCase();
-	return allAvailableFields.value.filter((f) => f.attribute && f.text.toLowerCase().includes(search));
-});
 
 // Currently visible headers
 const visibleHeaders = computed({
@@ -393,29 +283,6 @@ const visibleHeaders = computed({
 	},
 });
 
-// Initialize selected columns from current headers
-watch(
-	() => props.tableHeaders,
-	(headers) => {
-		if (!isLoadingSavedState.value) {
-			selectedColumns.value = headers.map((h) => h.value);
-		}
-	},
-	{ immediate: true },
-);
-
-// Load saved state only once on mount
-onMounted(() => {
-	if (props.layoutOptions?.savedColumns?.length > 0) {
-		isLoadingSavedState.value = true;
-		selectedColumns.value = props.layoutOptions.savedColumns;
-		applySavedColumns();
-		// Reset flag after a delay
-		setTimeout(() => {
-			isLoadingSavedState.value = false;
-		}, 500);
-	}
-});
 
 // Methods
 const isAttributeField = (field: string) => field.startsWith('attr_');
@@ -423,145 +290,34 @@ const isAttributeField = (field: string) => field.startsWith('attr_');
 const getAttributeForField = (field: string) => {
 	if (!isAttributeField(field)) return null;
 	const code = field.replace('attr_', '');
-	return props.attributes.find((a) => a.code === code);
+	return props.attributeList.find((a) => a.code === code);
+};
+
+const getDisplayForValue = (value: any, field: any) => {
+	// If display is 'related-values' but value is not an object, fallback to raw display
+	if (field?.display === 'related-values' && (typeof value !== 'object' || value === null)) {
+		return 'raw'; // Use raw display for non-expanded relations
+	}
+	return field?.display || null;
 };
 
 const hideColumn = (header: any) => {
 	const newHeaders = visibleHeaders.value.filter((h) => h.value !== header.value);
 	visibleHeaders.value = newHeaders;
-	selectedColumns.value = newHeaders.map((h) => h.value);
 
-	// Save the state
-	saveColumnState();
-};
-
-const openColumnSelector = () => {
-	columnMenuOpen.value = true;
-};
-
-const resetColumns = () => {
-	// Default columns
-	selectedColumns.value = ['primary_image', 'id', 'enabled', 'date_created'];
-
-	// Clear saved state
-	emit('update:layoutOptions', {
-		...props.layoutOptions,
-		savedColumns: null,
-		columnWidths: null,
-	});
-
-	applyColumns();
+	// Don't save state here - let the parent component handle it
+	// The parent will receive the update through emit('update:tableHeaders')
 };
 
 const onHeadersUpdate = (newHeaders: any[]) => {
 	// Update our headers
 	visibleHeaders.value = newHeaders;
 
-	// Save the new state (including new widths and order) with debounce
-	if (!isLoadingSavedState.value) {
-		setTimeout(() => {
-			saveColumnState();
-		}, 300);
-	}
+	// Don't save state here - let the parent component handle it
+	// The parent will receive the update through emit('update:tableHeaders')
 };
 
-const applyColumns = () => {
-	const newHeaders = selectedColumns.value
-		.map((col: string) => {
-			const field = allAvailableFields.value.find((f) => f.value === col);
-			if (!field) return null;
-
-			// Check if we have saved widths
-			const savedWidth = props.layoutOptions?.columnWidths?.[col] || 150;
-			// Check if we have saved alignment
-			const savedAlignment = props.layoutOptions?.columnAlignments?.[col] || 'left';
-
-			return {
-				text: field.text,
-				value: field.value,
-				width: savedWidth,
-				align: savedAlignment,
-				sortable: !['json'].includes(field.field?.type || ''),
-				field: field.field,
-			};
-		})
-		.filter((h) => h !== null);
-
-	visibleHeaders.value = newHeaders;
-	columnMenuOpen.value = false;
-
-	// Save the column configuration
-	saveColumnState();
-};
-
-const applySavedColumns = () => {
-	if (!props.layoutOptions?.savedColumns) return;
-
-	const newHeaders = props.layoutOptions.savedColumns
-		.map((col) => {
-			const field = allAvailableFields.value.find((f) => f.value === col);
-			if (!field) return null;
-
-			const savedWidth = props.layoutOptions?.columnWidths?.[col] || 150;
-			const savedAlignment = props.layoutOptions?.columnAlignments?.[col] || 'left';
-
-			return {
-				text: field.text,
-				value: field.value,
-				width: savedWidth,
-				align: savedAlignment,
-				sortable: !['json'].includes(field.field?.type || ''),
-				field: field.field,
-			};
-		})
-		.filter((h) => h !== null);
-
-	if (newHeaders.length > 0) {
-		// Don't trigger saves while loading
-		isLoadingSavedState.value = true;
-		visibleHeaders.value = newHeaders;
-		setTimeout(() => {
-			isLoadingSavedState.value = false;
-		}, 100);
-	}
-};
-
-const saveColumnState = () => {
-	// Prevent saving if we're in the process of loading saved state
-	if (isLoadingSavedState.value) return;
-
-	const columnOrder = visibleHeaders.value.map((h) => h.value);
-	const columnWidths = {};
-	const columnAlignments = {};
-
-	visibleHeaders.value.forEach((header) => {
-		if (header.width) {
-			columnWidths[header.value] = header.width;
-		}
-		if (header.align && header.align !== 'left') {
-			// Only save non-default alignments
-			columnAlignments[header.value] = header.align;
-		}
-	});
-
-	// Only emit if the state has actually changed
-	const currentSaved = props.layoutOptions?.savedColumns || [];
-	const currentWidths = props.layoutOptions?.columnWidths || {};
-	const currentAlignments = props.layoutOptions?.columnAlignments || {};
-
-	const columnsChanged = JSON.stringify(columnOrder) !== JSON.stringify(currentSaved);
-	const widthsChanged = JSON.stringify(columnWidths) !== JSON.stringify(currentWidths);
-	const alignmentsChanged = JSON.stringify(columnAlignments) !== JSON.stringify(currentAlignments);
-
-	if (columnsChanged || widthsChanged || alignmentsChanged) {
-		emit('update:layoutOptions', {
-			...props.layoutOptions,
-			savedColumns: columnOrder,
-			columnWidths: columnWidths,
-			columnAlignments: columnAlignments,
-		});
-	}
-};
+// Removed saveColumnState - column state is now managed by the actions component
 
 // Row click handler
 const handleRowClick = (event: { item: any; event: PointerEvent }) => {
@@ -583,8 +339,7 @@ const setAlignment = (header: any, alignment: 'left' | 'center' | 'right') => {
 	});
 	emit('update:tableHeaders', updatedHeaders);
 
-	// Save the updated alignment to layout options
-	saveColumnState();
+	// Column state will be saved by the parent component
 };
 </script>
 
@@ -624,4 +379,5 @@ const setAlignment = (header: any, alignment: 'left' | 'center' | 'right') => {
 .flip {
 	transform: scaleY(-1);
 }
+
 </style>

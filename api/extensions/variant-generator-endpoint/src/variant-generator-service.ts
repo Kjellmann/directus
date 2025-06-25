@@ -908,53 +908,50 @@ export class VariantGeneratorService {
 	private async updateVariantImage(variantId: string, imageId: string, trx: Knex.Transaction): Promise<void> {
 		try {
 			// Remove existing image assignments for this variant
-			const existingImageAssignments = await trx('products_product_images')
+			const existingAssets = await trx('product_assets')
 				.where('products_id', variantId)
-				.select('product_images_id');
+				.select('assets_id');
 
-			if (existingImageAssignments.length > 0) {
-				const imageIds = existingImageAssignments.map((r) => r.product_images_id);
-				await trx('products_product_images').where('products_id', variantId).delete();
-				await trx('product_images').whereIn('id', imageIds).delete();
+			if (existingAssets.length > 0) {
+				const assetIds = existingAssets.map((r) => r.assets_id);
+				await trx('product_assets').where('products_id', variantId).delete();
+				// Delete the assets themselves (they are variant-specific)
+				await trx('assets').whereIn('id', assetIds).delete();
 			}
 
-			// Debug: Log the values being inserted
-			this.logger.info(`Inserting product_images with values: media=${JSON.stringify(imageId)}, role='base', sort=1`);
+			// Get the product_images asset family
+			const assetFamily = await trx('asset_families')
+				.where('code', 'product_images')
+				.first();
 
-			// Try different formats - maybe media field expects different format
-
-			// First, let's check what kind of field media is by examining existing records
-			const existingProductImages = await trx('product_images').limit(1).first();
-			if (existingProductImages) {
-				this.logger.info(`Existing product_images record structure: ${JSON.stringify(existingProductImages)}`);
-				this.logger.info(
-					`Media field type: ${typeof existingProductImages.media}, value: ${JSON.stringify(
-						existingProductImages.media,
-					)}`,
-				);
-				this.logger.info(
-					`Role field type: ${typeof existingProductImages.role}, value: ${JSON.stringify(existingProductImages.role)}`,
-				);
+			if (!assetFamily) {
+				throw new Error('Product images asset family not found');
 			}
 
-			// Now we know the correct format: UUID id, string media, JSON stringified role array
-			const insertData = {
-				id: randomUUID(),
-				media: imageId,
-				role: JSON.stringify(['base']),
-				sort: 1,
+			// Create new asset record
+			const assetId = randomUUID();
+			const assetData = {
+				id: assetId,
+				code: `variant_${variantId}_${Date.now()}`, // Unique code for the asset
+				label: 'Variant Image',
+				media_file: imageId, // This is the directus_files ID
+				asset_family: assetFamily.id,
+				status: 'published',
+				source_type: 'directus',
+				date_created: new Date().toISOString(),
 			};
 
-			const insertResult = await trx('product_images').insert(insertData).returning('id');
+			await trx('assets').insert(assetData);
 
-			const productImageId = insertResult[0]?.id || insertResult[0];
+			// Create product_assets junction record
+			await trx('product_assets').insert({
+				id: randomUUID(),
+				products_id: variantId,
+				assets_id: assetId,
+				sort: 0,
+			});
 
-			if (productImageId) {
-				await trx('products_product_images').insert({
-					products_id: variantId,
-					product_images_id: productImageId,
-				});
-			}
+			this.logger.info(`Created asset ${assetId} and linked to variant ${variantId}`);
 		} catch (error) {
 			this.logger.error(`Failed to update image for variant ${variantId}:`, error);
 			throw error; // Re-throw to properly handle the transaction failure
@@ -1050,52 +1047,53 @@ export class VariantGeneratorService {
 			createdProducts.push({ id: createdId });
 		}
 
-		// Handle product images (via m2m relationship) if provided
-		const imageAssignments = [];
-		for (let i = 0; i < variants.length; i++) {
-			const variant = variants[i];
-			const productId = createdProducts[i]?.id;
-			if (!productId || !variant.preparedData.image) continue;
+		// Handle product images (via product_assets relationship) if provided
+		const assetAssignments = [];
+		
+		// Get the product_images asset family
+		const assetFamily = await trx('asset_families')
+			.where('code', 'product_images')
+			.first();
 
-			try {
-				// First create a product_images record
-				const result = await trx('product_images')
-					.insert({
-						media: variant.preparedData.image, // Reference to directus_files
-						role: 'variant_image',
-						sort: 1,
-					})
-					.returning('id');
+		if (!assetFamily) {
+			this.logger.warn('Product images asset family not found, skipping image assignments');
+		} else {
+			for (let i = 0; i < variants.length; i++) {
+				const variant = variants[i];
+				const productId = createdProducts[i]?.id;
+				if (!productId || !variant.preparedData.image) continue;
 
-				// Extract the ID from the result
-				const productImageId = result[0]?.id || result[0];
-
-				if (productImageId) {
-					// Then create the junction record
-					imageAssignments.push({
-						products_id: productId,
-						product_images_id: productImageId,
+				try {
+					// Create asset record
+					const assetId = randomUUID();
+					await trx('assets').insert({
+						id: assetId,
+						code: `variant_${productId}_${Date.now()}`,
+						label: 'Variant Image',
+						media_file: variant.preparedData.image, // Reference to directus_files
+						asset_family: assetFamily.id,
+						status: 'published',
+						source_type: 'directus',
+						date_created: new Date().toISOString(),
 					});
-				} else {
-					this.logger.warn(`No ID returned when creating product image for variant ${productId}`);
-				}
-			} catch (error) {
-				this.logger.warn(`Failed to create product image for variant ${productId}:`, error);
-			}
-		}
 
-		// Insert junction records if any
-		if (imageAssignments.length > 0) {
-			try {
-				await trx('products_product_images').insert(imageAssignments);
-				this.logger.info(`Created ${imageAssignments.length} product image assignments`);
-			} catch (error) {
-				this.logger.warn('Could not insert product image assignments:', error);
+					// Create the junction record
+					await trx('product_assets').insert({
+						id: randomUUID(),
+						products_id: productId,
+						assets_id: assetId,
+						sort: 0,
+					});
+					
+					assetAssignments.push({ productId, assetId });
+				} catch (error) {
+					this.logger.warn(`Failed to create asset for variant ${productId}:`, error);
+				}
 			}
 		}
 
 		this.logger.info(
-			`Created ${createdProducts.length} variant products with ${imageAssignments.length} image assignments`,
+			`Created ${createdProducts.length} variant products with ${assetAssignments.length} image assignments`,
 		);
 	}
 }

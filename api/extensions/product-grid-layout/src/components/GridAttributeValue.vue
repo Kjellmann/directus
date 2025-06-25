@@ -31,17 +31,36 @@
 		</template>
 
 		<!-- Simple Select -->
-		<template v-else-if="inputInterface === 'simple_select' && attribute?.options">
+		<template v-else-if="inputInterface === 'simple_select'">
 			<v-chip small>
-				{{ getOptionLabel(displayValue) }}
+				{{ getOptionLabelLocal(displayValue) }}
 			</v-chip>
 		</template>
 
+		<!-- Reference Entity (Single) -->
+		<template v-else-if="inputInterface === 'reference_entity_single'">
+			<v-chip small>
+				{{ getOptionLabelLocal(displayValue) }}
+			</v-chip>
+		</template>
+
+		<!-- Reference Entity (Multiple) -->
+		<template v-else-if="inputInterface === 'reference_entity_multiple'">
+			<div class="chips-value">
+				<v-chip v-for="val in ensureArray(displayValue)" :key="getReferenceKey(val)" x-small>
+					{{ getOptionLabelLocal(val) }}
+				</v-chip>
+				<span v-if="ensureArray(displayValue).length > 3" class="more-count">
+					+{{ ensureArray(displayValue).length - 3 }}
+				</span>
+			</div>
+		</template>
+
 		<!-- Multi Select -->
-		<template v-else-if="inputInterface === 'multi_select' && attribute?.options">
+		<template v-else-if="inputInterface === 'multi_select'">
 			<div class="chips-value">
 				<v-chip v-for="val in ensureArray(displayValue)" :key="val" x-small>
-					{{ getOptionLabel(val) }}
+					{{ getOptionLabelLocal(val) }}
 				</v-chip>
 				<span v-if="ensureArray(displayValue).length > 3" class="more-count">
 					+{{ ensureArray(displayValue).length - 3 }}
@@ -86,7 +105,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
+import { useAttributeOptions } from '../composables/useAttributeOptions';
 
 interface Props {
 	value: any;
@@ -95,6 +115,40 @@ interface Props {
 
 const props = defineProps<Props>();
 const imageError = ref(false);
+
+// Use the attribute options composable
+const { loadOptions, getOptionLabel, getOptionsRef } = useAttributeOptions();
+
+// Track if options are loaded
+const optionsLoaded = ref(false);
+
+// Get reactive reference to options for this attribute
+const attributeOptions = computed(() => {
+	if (!props.attribute?.code) return [];
+	return getOptionsRef(props.attribute.code).value;
+});
+
+// Load options for select-type attributes
+const loadAttributeOptions = async () => {
+	const interface_ = props.attribute?.type?.input_interface || 'text';
+	const shouldLoad = props.attribute && [
+		'simple_select', 
+		'multi_select',
+		'reference_entity_single',
+		'reference_entity_multiple'
+	].includes(interface_);
+	
+	if (shouldLoad) {
+		await loadOptions(props.attribute.code);
+		optionsLoaded.value = true;
+	}
+};
+
+onMounted(loadAttributeOptions);
+watch(() => props.attribute, async () => {
+	optionsLoaded.value = false;
+	await loadAttributeOptions();
+});
 
 // Computed
 const parsedValue = computed(() => {
@@ -121,6 +175,7 @@ const displayValue = computed(() => {
 		return val.value;
 	}
 
+
 	return val;
 });
 
@@ -140,7 +195,11 @@ const unit = computed(() => {
 });
 
 const inputInterface = computed(() => {
-	return props.attribute?.type?.input_interface || 'text';
+	// Handle both nested and flat structure
+	const interface_ = props.attribute?.type?.input_interface || 
+	                  props.attribute?.input_interface || 
+	                  'text';
+	return interface_;
 });
 
 const isEmpty = computed(() => {
@@ -191,11 +250,25 @@ const formatDate = (value: string) => {
 	}
 };
 
-const getOptionLabel = (code: string) => {
-	if (!props.attribute?.options) return code;
-	const option = props.attribute.options.find((opt: any) => opt.code === code);
-	return option?.label || code;
-};
+const getOptionLabelLocal = computed(() => {
+	return (code: string) => {
+		// Use the reactive options
+		const option = attributeOptions.value.find((opt: any) => opt.value === code);
+		if (option) {
+			return option.text || option.label || code;
+		}
+		
+		// Fallback to attribute options if available
+		if (props.attribute?.options) {
+			const fallbackOption = props.attribute.options.find((opt: any) => opt.code === code);
+			if (fallbackOption) {
+				return fallbackOption.label || code;
+			}
+		}
+		
+		return code;
+	};
+});
 
 const ensureArray = (value: any) => {
 	if (Array.isArray(value)) return value.slice(0, 3);
@@ -216,6 +289,27 @@ const getTableSummary = (value: any) => {
 const truncateText = (text: string, maxLength: number) => {
 	if (text.length <= maxLength) return text;
 	return text.substring(0, maxLength) + '...';
+};
+
+const getReferenceLabel = (value: any) => {
+	// If value is an object with label property, return it
+	if (value && typeof value === 'object' && 'label' in value) {
+		return value.label;
+	}
+	// If value is an object with code property, return it
+	if (value && typeof value === 'object' && 'code' in value) {
+		return value.code;
+	}
+	// Otherwise return the value as string
+	return String(value);
+};
+
+const getReferenceKey = (value: any) => {
+	// For v-for key, prioritize id, then code, then the value itself
+	if (value && typeof value === 'object') {
+		return value.id || value.code || JSON.stringify(value);
+	}
+	return value;
 };
 </script>
 

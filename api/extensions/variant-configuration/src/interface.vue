@@ -1630,8 +1630,9 @@ export default defineComponent({
 							'*',
 							'attributes.*',
 							'attributes.attribute_id.*',
-							'products_product_images.*',
-							'products_product_images.product_images_id.*',
+							'product_assets.*',
+							'product_assets.assets_id.*',
+							'product_assets.assets_id.media_file',
 						],
 						sort: ['-date_created'],
 					},
@@ -1697,10 +1698,10 @@ export default defineComponent({
 
 					// Get the first image from the product images if available
 					let image = null;
-					if (variant.products_product_images && variant.products_product_images.length > 0) {
-						const firstImageRelation = variant.products_product_images[0];
-						if (firstImageRelation.product_images_id && firstImageRelation.product_images_id.media) {
-							image = firstImageRelation.product_images_id.media;
+					if (variant.product_assets && variant.product_assets.length > 0) {
+						const firstAsset = variant.product_assets[0];
+						if (firstAsset.assets_id && firstAsset.assets_id.media_file) {
+							image = firstAsset.assets_id.media_file;
 						}
 					}
 
