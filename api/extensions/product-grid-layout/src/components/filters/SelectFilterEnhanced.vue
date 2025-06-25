@@ -178,8 +178,8 @@ const { t } = useI18n(createI18nOptions(currentLanguage.value));
 
 // Use the new composable for lazy loading
 const { loadOptions, getOptionsRef, getLoadingRef, getTotalCountRef, shouldUseSearch, getOptionLabel } = useFilterOptions({
-	threshold: 50, // Use search if more than 50 options
-	pageSize: 50,
+	threshold: 25, // Use search if more than 25 options
+	pageSize: 25,
 });
 
 // Component state
@@ -320,7 +320,7 @@ onMounted(async () => {
 		}
 	} else {
 		// Check if should use search based on provided options
-		useSearchMode.value = props.options.length > 50;
+		useSearchMode.value = props.options.length > 25;
 	}
 });
 

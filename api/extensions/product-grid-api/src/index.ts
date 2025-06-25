@@ -77,7 +77,7 @@ export default defineEndpoint({
 					attribute_code, 
 					search = '', 
 					page = 1, 
-					limit = 50 
+					limit = 25 
 				} = req.query;
 
 				if (!attribute_code) {

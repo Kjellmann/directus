@@ -13,8 +13,8 @@ interface FilterOptionsConfig {
 }
 
 const DEFAULT_CONFIG: FilterOptionsConfig = {
-	threshold: 50, // Switch to search mode if more than 50 options
-	pageSize: 50,
+	threshold: 25, // Switch to search mode if more than 25 options
+	pageSize: 25,
 	searchDebounce: 300,
 };
 
