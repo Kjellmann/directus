@@ -124,14 +124,8 @@
 								:is="getFilterComponent(attr)"
 								v-model="attributeFilters[`attr_${attr.code}`]"
 								:attribute="attr"
-								:options="getFilterOptions(attr)"
-								:loading="loadingOptions[attr.code]"
 								@update:model-value="onAttributeFilterChange"
 							/>
-							<!-- Debug: Show options count -->
-							<div v-if="getFilterOptions(attr).length > 0" style="font-size: 11px; color: var(--theme--foreground-subdued); margin-top: 4px;">
-								{{ getFilterOptions(attr).length }} options loaded
-							</div>
 						</div>
 					</div>
 				</div>
@@ -158,6 +152,7 @@ import TextFilter from './filters/TextFilter.vue';
 import NumericRangeFilter from './filters/NumericRangeFilter.vue';
 import DateFilter from './filters/DateFilter.vue';
 import SelectFilter from './filters/SelectFilter.vue';
+import SelectFilterEnhanced from './filters/SelectFilterEnhanced.vue';
 import BooleanFilter from './filters/BooleanFilter.vue';
 
 const props = defineProps({
@@ -306,17 +301,17 @@ const filterComponentMap = {
 	number: markRaw(NumericRangeFilter),
 	measurement: markRaw(NumericRangeFilter),
 	date: markRaw(DateFilter),
-	simple_select: markRaw(SelectFilter),
-	multi_select: markRaw(SelectFilter),
-	reference_entity_single: markRaw(SelectFilter),
-	reference_entity_multiple: markRaw(SelectFilter),
+	simple_select: markRaw(SelectFilterEnhanced),
+	multi_select: markRaw(SelectFilterEnhanced),
+	reference_entity_single: markRaw(SelectFilterEnhanced),
+	reference_entity_multiple: markRaw(SelectFilterEnhanced),
 	yes_no: markRaw(BooleanFilter),
 	table: markRaw(TextFilter), // Complex type, use text filter for now
 };
 
 // Get filterable attributes with type info
 const filterableAttributes = computed(() => {
-	return props.attributes.filter((attr) => {
+	return props.attributes.filter((attr: any) => {
 		// Make sure we have the type info
 		return attr.usable_in_filter && attr.type_info;
 	});
@@ -924,22 +919,15 @@ function initializeFilters() {
 onMounted(() => {
 	initializeFilters();
 	loadSystemFieldOptions();
-	filterableAttributes.value.forEach((attr) => {
-		loadFilterOptions(attr);
-	});
+	// Don't eagerly load filter options - let the SelectFilterEnhanced component handle it
 });
 
 // Watch for attribute changes
 watch(
 	() => props.attributes,
 	(newAttrs) => {
-		if (newAttrs) {
-			filterableAttributes.value.forEach((attr) => {
-				if (!filterOptions.value[attr.code]) {
-					loadFilterOptions(attr);
-				}
-			});
-		}
+		// Attributes changed - no need to load options here
+		// The SelectFilterEnhanced component will handle loading when opened
 	},
 	{ deep: true },
 );

@@ -73,11 +73,21 @@ export default defineEndpoint({
 			try {
 				const schema = await getSchema();
 				const accountability = req.accountability;
-				const { attribute_code } = req.query;
+				const { 
+					attribute_code, 
+					search = '', 
+					page = 1, 
+					limit = 50 
+				} = req.query;
 
 				if (!attribute_code) {
 					return res.status(400).json({ error: 'attribute_code is required' });
 				}
+
+				const searchTerm = String(search).toLowerCase();
+				const pageNum = Math.max(1, Number(page));
+				const pageSize = Math.min(200, Math.max(1, Number(limit))); // Max 200 items per page
+				const offset = (pageNum - 1) * pageSize;
 
 				// Get the attribute
 				const attributesService = new ItemsService('attributes', { schema, accountability });
@@ -115,7 +125,6 @@ export default defineEndpoint({
 
 					try {
 						logger.info(`Fetching reference collection for ${attribute.code}: ${attribute.reference_collection}`);
-						// Try to fetch from a collection with the attribute code name (e.g., "colors" for "color" attribute)
 						let collectionName = attribute.reference_collection;
 
 						if (!collectionName) {
@@ -124,88 +133,160 @@ export default defineEndpoint({
 
 						const referenceService = new ItemsService(collectionName, { schema, accountability });
 
-						referenceData = await referenceService.readByQuery({
-							fields: ['*'],
-							limit: -1,
+						// First get total count
+						const totalResult = await referenceService.readByQuery({
+							aggregate: { count: ['*'] },
 						});
+						const totalCount = totalResult?.[0]?.count || 0;
 
-						console.log('referenceData', referenceData);
+						// Build query with search and pagination
+						const query: any = {
+							fields: ['*'],
+							sort: ['label', 'code', 'id'],
+						};
+
+						// Add search filter if provided
+						if (searchTerm) {
+							query.filter = {
+								_or: [
+									{ label: { _icontains: searchTerm } },
+									{ code: { _icontains: searchTerm } },
+								],
+							};
+
+							// Get filtered count
+							const filteredResult = await referenceService.readByQuery({
+								...query,
+								aggregate: { count: ['*'] },
+							});
+							const filteredCount = filteredResult?.[0]?.count || 0;
+
+							// Apply pagination
+							query.limit = pageSize;
+							query.offset = offset;
+
+							referenceData = await referenceService.readByQuery(query);
+
+							// Transform and return paginated results
+							const transformedData = referenceData.map((item: any) => ({
+								value: item.code || item.id,
+								text: item.label || item.code || item.id
+							}));
+
+							res.json({
+								data: transformedData,
+								meta: {
+									total_count: filteredCount,
+									page: pageNum,
+									page_size: pageSize,
+									total_pages: Math.ceil(filteredCount / pageSize),
+								},
+								attribute: {
+									id: attribute.id,
+									code: attribute.code,
+									label: attribute.label,
+									type: attribute.type,
+									input_interface: inputInterface,
+								},
+							});
+							return;
+						} else {
+							// No search - apply pagination directly
+							query.limit = pageSize;
+							query.offset = offset;
+
+							referenceData = await referenceService.readByQuery(query);
+
+							// Transform data
+							const transformedData = referenceData.map((item: any) => ({
+								value: item.code || item.id,
+								text: item.label || item.code || item.id
+							}));
+
+							res.json({
+								data: transformedData,
+								meta: {
+									total_count: totalCount,
+									page: pageNum,
+									page_size: pageSize,
+									total_pages: Math.ceil(totalCount / pageSize),
+								},
+								attribute: {
+									id: attribute.id,
+									code: attribute.code,
+									label: attribute.label,
+									type: attribute.type,
+									input_interface: inputInterface,
+								},
+							});
+							return;
+						}
 					} catch (error) {
 						logger.warn(`Could not fetch reference collection for ${attribute.code}:`, error.message);
-
-						referenceData = [];
+						res.json({
+							data: [],
+							meta: {
+								total_count: 0,
+								page: 1,
+								page_size: pageSize,
+								total_pages: 0,
+							},
+							attribute: {
+								id: attribute.id,
+								code: attribute.code,
+								label: attribute.label,
+								type: attribute.type,
+								input_interface: inputInterface,
+							},
+						});
+						return;
 					}
-
-					// Sort reference data by label
-					referenceData.sort((a, b) => {
-						const labelA = a.label || a.code || a.id;
-						const labelB = b.label || b.code || b.id;
-						return String(labelA).localeCompare(String(labelB), undefined, { numeric: true, sensitivity: 'base' });
-					});
-
-					// Transform reference data to value/text format for consistency
-					const transformedData = referenceData.map(item => ({
-						value: item.code || item.id,
-						text: item.label || item.code || item.id
-					}));
-
-					res.json({
-						data: transformedData,
-						attribute: {
-							id: attribute.id,
-							code: attribute.code,
-							label: attribute.label,
-							type: attribute.type,
-							input_interface: inputInterface,
-						},
-					});
 				} else if (inputInterface === 'simple_select' || inputInterface === 'multi_select') {
 					// For select types, get the defined options from attribute_options table
 					const optionsService = new ItemsService('attribute_options', { schema, accountability });
+					
+					// Build base query
+					const baseFilter: any = { attribute_id: { _eq: attribute.id } };
+					
+					// Add search filter if provided
+					if (searchTerm) {
+						baseFilter._or = [
+							{ label: { _icontains: searchTerm } },
+							{ code: { _icontains: searchTerm } },
+						];
+					}
+
+					// Get total count
+					const totalResult = await optionsService.readByQuery({
+						filter: baseFilter,
+						aggregate: { count: ['*'] },
+					});
+					const totalCount = totalResult?.[0]?.count || 0;
+
+					// Get paginated options
 					const options = await optionsService.readByQuery({
-						filter: { attribute_id: { _eq: attribute.id } },
+						filter: baseFilter,
 						fields: ['code', 'label'],
 						sort: ['sort', 'label'],
-						limit: -1,
+						limit: pageSize,
+						offset: offset,
 					});
 
-					// Get unique values actually used in products
-					const productAttributesService = new ItemsService('product_attributes', { schema, accountability });
-					const values = await productAttributesService.readByQuery({
-						filter: { attribute_id: { _eq: attribute.id } },
-						fields: ['value'],
-						limit: -1,
-					});
-
-					// Extract unique used values
-					const usedValues = new Set();
-					values.forEach((v) => {
-						if (v.value) {
-							try {
-								const parsed = JSON.parse(v.value);
-								const actualValue = parsed?.value ?? parsed;
-								if (actualValue !== null && actualValue !== '') {
-									usedValues.add(actualValue);
-								}
-							} catch {
-								if (v.value !== null && v.value !== '') {
-									usedValues.add(v.value);
-								}
-							}
-						}
-					});
-
-					// Filter options to only include those that are actually used
-					// and format them with code and label
-					const filteredOptions = options
-						.filter(opt => usedValues.has(opt.code))
-						.map(opt => ({
-							value: opt.code,
-							text: opt.label || opt.code
-						}));
+					// For now, we'll show all options without filtering by used values
+					// This can be optimized later if needed
+					const formattedOptions = options.map((opt: any) => ({
+						value: opt.code,
+						text: opt.label || opt.code
+					}));
 
 					res.json({
-						data: filteredOptions,
+						data: formattedOptions,
+						meta: {
+							total_count: totalCount,
+							page: pageNum,
+							page_size: pageSize,
+							total_pages: Math.ceil(totalCount / pageSize),
+						},
 						attribute: {
 							id: attribute.id,
 							code: attribute.code,
