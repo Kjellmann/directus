@@ -128,6 +128,10 @@
 								:loading="loadingOptions[attr.code]"
 								@update:model-value="onAttributeFilterChange"
 							/>
+							<!-- Debug: Show options count -->
+							<div v-if="getFilterOptions(attr).length > 0" style="font-size: 11px; color: var(--theme--foreground-subdued); margin-top: 4px;">
+								{{ getFilterOptions(attr).length }} options loaded
+							</div>
 						</div>
 					</div>
 				</div>
@@ -521,9 +525,17 @@ async function loadFilterOptions(attribute) {
 			response.data.data.forEach((val) => {
 				// Handle both object and string values
 				if (typeof val === 'object' && val !== null) {
-					// For reference entities, we might get full objects with id, code, label
-					if (inputInterface === 'reference_entity_single' || inputInterface === 'reference_entity_multiple') {
-						// For reference entities, use the code as the value (since that's what's stored in product_attributes)
+					// Check if it's already in value/text format (from API)
+					if (val.value !== undefined && val.text !== undefined) {
+						// Already in the correct format
+						if (!uniqueOptions.has(val.value)) {
+							uniqueOptions.set(val.value, {
+								text: val.text,
+								value: val.value,
+							});
+						}
+					} else if (val.code || val.id) {
+						// Legacy format with code/label or id
 						const key = val.code || val.id;
 						const value = val.code || val.id;
 						const text = val.label || val.code || val.id;
@@ -532,20 +544,6 @@ async function loadFilterOptions(attribute) {
 							uniqueOptions.set(key, {
 								text: text,
 								value: value,
-							});
-						}
-					} else {
-						// For other objects (like simple_select/multi_select with value/text format)
-						if (val.value && !uniqueOptions.has(val.value)) {
-							uniqueOptions.set(val.value, {
-								text: val.text || val.value,
-								value: val.value,
-							});
-						} else if (val.code && !uniqueOptions.has(val.code)) {
-							// Fallback for objects with code/label format
-							uniqueOptions.set(val.code, {
-								text: val.label || val.code,
-								value: val.code,
 							});
 						}
 					}
@@ -575,8 +573,10 @@ async function loadFilterOptions(attribute) {
 			// Special debug for reference entities
 			if (inputInterface === 'reference_entity_single' || inputInterface === 'reference_entity_multiple') {
 				console.log(`[ProductFilters] Reference entity options for ${attribute.code}:`, {
+					inputInterface: inputInterface,
 					raw_data: response.data.data,
 					processed_options: filterOptions.value[attribute.code],
+					firstFiveProcessed: filterOptions.value[attribute.code].slice(0, 5)
 				});
 			}
 		}
@@ -590,7 +590,14 @@ async function loadFilterOptions(attribute) {
 
 // Get filter options for an attribute
 function getFilterOptions(attribute) {
-	return filterOptions.value[attribute.code] || [];
+	const options = filterOptions.value[attribute.code] || [];
+	console.log(`[ProductFilters] Getting options for ${attribute.code}:`, {
+		code: attribute.code,
+		optionsCount: options.length,
+		options: options.slice(0, 5), // Show first 5 for debugging
+		loadingState: loadingOptions.value[attribute.code]
+	});
+	return options;
 }
 
 // Handle attribute filter change
