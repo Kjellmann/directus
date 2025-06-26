@@ -800,6 +800,30 @@ function buildStandardFilters() {
 				}
 			}
 		} else if (filterValue !== null && filterValue !== undefined) {
+			// Check if the filter value is meaningful (not just {_eq: null} or empty)
+			if (typeof filterValue === 'object') {
+				// Check if it's an operator object with null/undefined/empty values
+				const operators = ['_eq', '_neq', '_in', '_nin', '_gt', '_gte', '_lt', '_lte', '_contains', '_icontains'];
+				const hasValidValue = operators.some(op => {
+					if (filterValue[op] !== undefined) {
+						// Check if the value is meaningful
+						if (filterValue[op] === null) return false;
+						if (Array.isArray(filterValue[op]) && filterValue[op].length === 0) return false;
+						if (filterValue[op] === '') return false;
+						return true;
+					}
+					return false;
+				});
+				
+				// Also check for _empty/_nempty which don't need values
+				const hasEmptyOperator = filterValue._empty === true || filterValue._nempty === true;
+				
+				if (!hasValidValue && !hasEmptyOperator) {
+					// Skip this filter as it has no meaningful value
+					return;
+				}
+			}
+
 			// Handle special cases for family and family_variant (convert string IDs back to numbers)
 			if ((field === 'family' || field === 'family_variant') && typeof filterValue === 'object') {
 				if (filterValue._in) {
@@ -827,10 +851,15 @@ function clearFilters() {
 		filters.value[key] = null;
 	});
 
-	// Clear system field filters
-	Object.keys(systemFieldFilters.value).forEach((key) => {
-		systemFieldFilters.value[key] = null;
-	});
+	// Clear system field filters - use fresh object to ensure clean state
+	systemFieldFilters.value = {
+		id: null,
+		parent_product_id: null,
+		product_type: null,
+		family: null,
+		family_variant: null,
+		enabled: null,
+	};
 
 	attributeFilters.value = {};
 	appliedFilters.value = {};
@@ -869,6 +898,23 @@ function initializeFilters() {
 			} else {
 				// Regular system fields
 				if (currentFilters.value[field] !== null && currentFilters.value[field] !== undefined) {
+					// Check if the filter has meaningful values
+					const filterValue = currentFilters.value[field];
+					
+					// Skip filters that are just {_eq: null} or similar
+					if (typeof filterValue === 'object') {
+						const hasValidValue = Object.entries(filterValue).some(([op, val]) => {
+							if (val === null || val === undefined || val === '') return false;
+							if (Array.isArray(val) && val.length === 0) return false;
+							return true;
+						});
+						
+						if (!hasValidValue) {
+							systemFieldFilters.value[field] = null;
+							return;
+						}
+					}
+					
 					// Special handling for family and family_variant - convert numeric IDs to strings
 					if ((field === 'family' || field === 'family_variant') && currentFilters.value[field]) {
 						const filterValue = currentFilters.value[field];

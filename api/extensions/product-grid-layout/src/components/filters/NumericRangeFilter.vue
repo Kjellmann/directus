@@ -178,7 +178,7 @@ function onOperatorChange() {
 }
 
 function updateSingleValue() {
-  if (!operator.value || singleValue.value === null) {
+  if (!operator.value || singleValue.value === null || singleValue.value === '') {
     emit('update:modelValue', null);
     return;
   }
