@@ -23,6 +23,69 @@ export default defineLayout({
 		// Get collection info
 		const { primaryKeyField, fields: fieldsInCollection, info, sortField } = useCollection(collection as any);
 
+		// Helper function to clean filter objects
+		function cleanFilter(filter: any): any {
+			if (!filter || typeof filter !== 'object') return filter;
+			
+			// Handle _and/_or arrays
+			if (filter._and && Array.isArray(filter._and)) {
+				const cleaned = filter._and
+					.map(f => cleanFilter(f))
+					.filter(f => f !== null && Object.keys(f).length > 0);
+				
+				if (cleaned.length === 0) return null;
+				if (cleaned.length === 1) return cleaned[0];
+				return { _and: cleaned };
+			}
+			
+			if (filter._or && Array.isArray(filter._or)) {
+				const cleaned = filter._or
+					.map(f => cleanFilter(f))
+					.filter(f => f !== null && Object.keys(f).length > 0);
+				
+				if (cleaned.length === 0) return null;
+				if (cleaned.length === 1) return cleaned[0];
+				return { _or: cleaned };
+			}
+			
+			// Clean individual filter objects
+			const cleaned = {};
+			for (const [key, value] of Object.entries(filter)) {
+				if (value === null || value === undefined) continue;
+				
+				// Check if it's an operator object
+				if (typeof value === 'object' && !Array.isArray(value)) {
+					// Check for empty operator values like {_eq: null}
+					const operators = ['_eq', '_neq', '_in', '_nin', '_gt', '_gte', '_lt', '_lte', '_contains', '_icontains'];
+					let hasValidValue = false;
+					
+					for (const op of operators) {
+						if (value[op] !== undefined) {
+							if (value[op] === null || value[op] === '' || (Array.isArray(value[op]) && value[op].length === 0)) {
+								// Skip empty values
+								continue;
+							}
+							hasValidValue = true;
+						}
+					}
+					
+					// Check for _empty/_nempty which are valid without values
+					if (value._empty === true || value._nempty === true) {
+						hasValidValue = true;
+					}
+					
+					if (hasValidValue) {
+						cleaned[key] = value;
+					}
+				} else {
+					// Non-object values (direct values)
+					cleaned[key] = value;
+				}
+			}
+			
+			return Object.keys(cleaned).length > 0 ? cleaned : null;
+		}
+
 		// State
 		const items = ref([]);
 		const loading = ref(false);
@@ -34,7 +97,9 @@ export default defineLayout({
 		
 		// Local filter state (props.filter is readonly)
 		// Initialize from layoutQuery if available, otherwise from props
-		const localFilter = ref(props.layoutQuery?.filter || props.filter || null);
+		// Clean up any invalid filter states (like {id: {_eq: null}})
+		const initialFilter = props.layoutQuery?.filter || props.filter || null;
+		const localFilter = ref(cleanFilter(initialFilter));
 
 		// Layout state management
 		const selection = computed({
@@ -204,8 +269,9 @@ export default defineLayout({
 		
 		// Watch for external filter changes from props
 		watch(() => props.filter, (newFilter) => {
-			if (newFilter !== localFilter.value) {
-				localFilter.value = newFilter;
+			const cleanedFilter = cleanFilter(newFilter);
+			if (cleanedFilter !== localFilter.value) {
+				localFilter.value = cleanedFilter;
 			}
 		});
 
@@ -240,17 +306,18 @@ export default defineLayout({
 			console.log('[Product Grid] onFilterChange called with:', filters);
 			console.log('[Product Grid] Filter before update:', localFilter.value);
 
-			// Update the local filter reactive variable which is being watched
-			localFilter.value = filters.filter;
+			// Clean and update the local filter reactive variable which is being watched
+			const cleanedFilter = cleanFilter(filters.filter);
+			localFilter.value = cleanedFilter;
 			
-			console.log('[Product Grid] Filter after update:', localFilter.value);
+			console.log('[Product Grid] Filter after cleaning and update:', localFilter.value);
 
 			// Update layoutQuery with both standard filters and attribute filters
 			const updates: any = {};
 			
 			// Store standard filters
-			if (filters.filter) {
-				updates.filter = filters.filter;
+			if (cleanedFilter) {
+				updates.filter = cleanedFilter;
 			} else {
 				// If no filters, we need to explicitly remove it
 				updates.filter = undefined;
