@@ -12,7 +12,45 @@
 			<v-badge v-if="activeFilterCount > 0" :value="activeFilterCount" />
 		</v-button>
 
-		<v-drawer v-model="showFilters" :title="t('filters')" icon="filter_list" @cancel="showFilters = false">
+		<v-drawer 
+			v-model="showFilters" 
+			:title="t('filters')" 
+			icon="filter_list" 
+			:sidebar-label="t('select_attributes')"
+			:sidebar-resizeable="true"
+			@cancel="showFilters = false"
+		>
+			<template #sidebar>
+				<div class="attribute-selector">
+					<div class="attribute-selector-header">
+						<span class="title">{{ t('available_attributes') }}</span>
+						<v-button 
+							v-tooltip.bottom="t('toggle_all')" 
+							icon 
+							x-small 
+							secondary 
+							@click="toggleAllAttributes"
+						>
+							<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
+						</v-button>
+					</div>
+					
+					<div class="attribute-list">
+						<div 
+							v-for="attr in allAttributes" 
+							:key="attr.id" 
+							class="attribute-item"
+							:class="{ disabled: !selectedAttributeIds.includes(attr.id) }"
+						>
+							<span class="attribute-label">{{ attr.label }}</span>
+							<v-switch
+								:model-value="selectedAttributeIds.includes(attr.id)"
+								@update:model-value="toggleAttribute(attr.id, $event)"
+							/>
+						</div>
+					</div>
+				</div>
+			</template>
 			<div class="filter-content">
 				<div class="filter-scrollable">
 					<!-- Active filters display -->
@@ -116,6 +154,7 @@
 
 					<!-- Dynamic attribute filters -->
 					<div class="filter-group" v-if="filterableAttributes.length > 0">
+						<div class="filter-group-title">{{ t('attributes') }}</div>
 						<div v-for="attr in filterableAttributes" :key="attr.id" class="filter-field">
 							<label>{{ attr.label }}</label>
 
@@ -127,6 +166,13 @@
 								@update:model-value="onAttributeFilterChange"
 							/>
 						</div>
+					</div>
+					
+					<!-- No attributes selected message -->
+					<div v-else-if="selectedAttributeIds.length === 0" class="no-attributes-message">
+						<v-info icon="filter_list" :title="t('no_attributes_selected')">
+							{{ t('select_attributes_from_sidebar') }}
+						</v-info>
 					</div>
 				</div>
 
@@ -292,6 +338,11 @@ const productTypeOptions = ref<Array<{ text: string; value: any }>>([]);
 const familyOptions = ref<Array<{ text: string; value: any }>>([]);
 const familyVariantOptions = ref<Array<{ text: string; value: any }>>([]);
 
+// Attribute selection state
+const allAttributes = ref<any[]>([]);
+const selectedAttributeIds = ref<number[]>([]);
+const isLoadingAttributes = ref(false);
+
 // Map of input interfaces to filter components
 const filterComponentMap = {
 	text: markRaw(TextFilter),
@@ -309,12 +360,18 @@ const filterComponentMap = {
 	table: markRaw(TextFilter), // Complex type, use text filter for now
 };
 
-// Get filterable attributes with type info
+// Get filterable attributes with type info based on user selection
 const filterableAttributes = computed(() => {
 	return props.attributes.filter((attr: any) => {
-		// Make sure we have the type info
-		return attr.usable_in_filter && attr.type_info;
+		// Filter by selected attributes and ensure we have type info
+		return selectedAttributeIds.value.includes(attr.id) && attr.type_info;
 	});
+});
+
+// Check if all attributes are selected
+const allAttributesSelected = computed(() => {
+	return allAttributes.value.length > 0 && 
+		allAttributes.value.every(attr => selectedAttributeIds.value.includes(attr.id));
 });
 
 // Get the appropriate filter component for an attribute
@@ -961,10 +1018,85 @@ function initializeFilters() {
 	appliedAttributeFilters.value = { ...attributeFilters.value };
 }
 
+// Load all attributes from the attributes collection
+async function loadAllAttributes() {
+	if (isLoadingAttributes.value) return;
+	
+	isLoadingAttributes.value = true;
+	try {
+		const response = await api.get('/items/attributes', {
+			params: {
+				fields: ['id', 'code', 'label', 'usable_in_filter', 'type', 'type.input_interface'],
+				sort: ['label'],
+				limit: -1,
+			},
+		});
+
+		if (response.data?.data) {
+			allAttributes.value = response.data.data.map((attr: any) => ({
+				...attr,
+				type_info: attr.type, // type is expanded with input_interface
+			}));
+			
+			// Initialize selected attributes based on usable_in_filter defaults
+			// TODO: In the future, load from user preferences here
+			const defaultSelected = allAttributes.value
+				.filter(attr => attr.usable_in_filter)
+				.map(attr => attr.id);
+			
+			selectedAttributeIds.value = defaultSelected;
+		}
+	} catch (error) {
+		console.error('Failed to load attributes:', error);
+	} finally {
+		isLoadingAttributes.value = false;
+	}
+}
+
+// Toggle attribute selection
+function toggleAttribute(attributeId: number, selected: boolean) {
+	if (selected) {
+		selectedAttributeIds.value = [...selectedAttributeIds.value, attributeId];
+	} else {
+		// Remove from selected
+		selectedAttributeIds.value = selectedAttributeIds.value.filter(id => id !== attributeId);
+		
+		// Clear any active filters for this attribute
+		const attribute = allAttributes.value.find(attr => attr.id === attributeId);
+		if (attribute) {
+			const filterKey = `attr_${attribute.code}`;
+			if (attributeFilters.value[filterKey]) {
+				delete attributeFilters.value[filterKey];
+				// If filters are applied, we need to update them
+				if (appliedAttributeFilters.value[filterKey]) {
+					applyFilters();
+				}
+			}
+		}
+	}
+}
+
+// Toggle all attributes
+function toggleAllAttributes() {
+	if (allAttributesSelected.value) {
+		// Deselect all - but this would clear all filters, so we should confirm
+		selectedAttributeIds.value = [];
+		// Clear all attribute filters
+		attributeFilters.value = {};
+		if (Object.keys(appliedAttributeFilters.value).length > 0) {
+			applyFilters();
+		}
+	} else {
+		// Select all
+		selectedAttributeIds.value = allAttributes.value.map(attr => attr.id);
+	}
+}
+
 // Initialize filter options when component mounts
 onMounted(() => {
 	initializeFilters();
 	loadSystemFieldOptions();
+	loadAllAttributes();
 	// Don't eagerly load filter options - let the SelectFilterEnhanced component handle it
 });
 
@@ -1111,5 +1243,73 @@ watch(
 	gap: 12px;
 	padding: var(--content-padding);
 	border-top: var(--theme--border-width) solid var(--theme--border-color);
+}
+
+/* Attribute selector sidebar styles */
+.attribute-selector {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	background-color: var(--theme--background-subdued);
+}
+
+.attribute-selector-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px;
+	border-bottom: 1px solid var(--theme--border-color-subdued);
+	
+	.title {
+		font-weight: 600;
+		font-size: 14px;
+		color: var(--theme--foreground-normal);
+	}
+}
+
+.attribute-list {
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px 0;
+}
+
+.attribute-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 16px;
+	cursor: pointer;
+	transition: background-color 0.2s;
+	
+	&:hover {
+		background-color: var(--theme--background-normal);
+	}
+	
+	&.disabled {
+		opacity: 0.5;
+		
+		.attribute-label {
+			color: var(--theme--foreground-subdued);
+		}
+	}
+	
+	.attribute-label {
+		flex: 1;
+		font-size: 13px;
+		color: var(--theme--foreground-normal);
+		padding-right: 12px;
+	}
+	
+	.v-switch {
+		flex-shrink: 0;
+	}
+}
+
+.no-attributes-message {
+	padding: 24px;
+	
+	.v-info {
+		margin: 0;
+	}
 }
 </style>

@@ -48,6 +48,13 @@ export const translations = {
 		select_operator: 'Select Operator',
 		apply_filters: 'Apply Filters',
 		clear_filters: 'Clear Filters',
+		
+		// Attribute selector
+		select_attributes: 'Select Attributes',
+		available_attributes: 'Available Attributes',
+		toggle_all: 'Toggle All',
+		no_attributes_selected: 'No Attributes Selected',
+		select_attributes_from_sidebar: 'Select attributes from the sidebar to add filters',
 		from: 'From',
 		to: 'To',
 		use_advanced_operators: 'Use Advanced Operators',
