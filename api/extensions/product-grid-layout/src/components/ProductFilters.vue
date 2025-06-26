@@ -41,10 +41,12 @@
 							:key="attr.id" 
 							class="attribute-item"
 							:class="{ disabled: !selectedAttributeIds.includes(attr.id) }"
+							@click="toggleAttribute(attr.id, !selectedAttributeIds.includes(attr.id))"
 						>
 							<span class="attribute-label">{{ attr.label }}</span>
-							<v-switch
+							<v-checkbox
 								:model-value="selectedAttributeIds.includes(attr.id)"
+								@click.stop
 								@update:model-value="toggleAttribute(attr.id, $event)"
 							/>
 						</div>
@@ -1055,8 +1057,13 @@ async function loadAllAttributes() {
 
 // Toggle attribute selection
 function toggleAttribute(attributeId: number, selected: boolean) {
+	console.log('[ProductFilters] toggleAttribute called:', { attributeId, selected, currentSelected: selectedAttributeIds.value });
+	
 	if (selected) {
-		selectedAttributeIds.value = [...selectedAttributeIds.value, attributeId];
+		// Add to selected if not already there
+		if (!selectedAttributeIds.value.includes(attributeId)) {
+			selectedAttributeIds.value = [...selectedAttributeIds.value, attributeId];
+		}
 	} else {
 		// Remove from selected
 		selectedAttributeIds.value = selectedAttributeIds.value.filter(id => id !== attributeId);
@@ -1074,6 +1081,8 @@ function toggleAttribute(attributeId: number, selected: boolean) {
 			}
 		}
 	}
+	
+	console.log('[ProductFilters] After toggle, selectedAttributeIds:', selectedAttributeIds.value);
 }
 
 // Toggle all attributes
@@ -1300,8 +1309,9 @@ watch(
 		padding-right: 12px;
 	}
 	
-	.v-switch {
+	.v-checkbox {
 		flex-shrink: 0;
+		--v-checkbox-color: var(--theme--primary);
 	}
 }
 
