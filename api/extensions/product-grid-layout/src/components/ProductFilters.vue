@@ -16,46 +16,49 @@
 			v-model="showFilters" 
 			:title="t('filters')" 
 			icon="filter_list" 
-			:sidebar-label="t('select_attributes')"
-			:sidebar-resizeable="true"
+			:sidebar-label="sidebarCollapsed ? '' : t('select_attributes')"
+			:sidebar-resizeable="!sidebarCollapsed"
+			:class="{ 'sidebar-collapsed': sidebarCollapsed }"
 			@cancel="showFilters = false"
 		>
 			<template #sidebar>
-				<div class="attribute-selector" :class="{ collapsed: sidebarCollapsed }">
-					<div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
-						<v-icon :name="sidebarCollapsed ? 'chevron_right' : 'chevron_left'" />
-					</div>
-					
-					<div class="attribute-selector-content" v-show="!sidebarCollapsed">
-						<div class="attribute-selector-header">
-							<span class="title">{{ t('available_attributes') }}</span>
-							<v-button 
-								v-tooltip.bottom="t('toggle_all')" 
-								icon 
-								x-small 
-								secondary 
-								@click="toggleAllAttributes"
-							>
-								<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
-							</v-button>
+				<div class="attribute-selector">
+					<div class="sidebar-content" :class="{ collapsed: sidebarCollapsed }">
+						<div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+							<v-icon :name="sidebarCollapsed ? 'chevron_right' : 'chevron_left'" />
 						</div>
-					
-					<div class="attribute-list">
-						<div 
-							v-for="attr in allAttributes" 
-							:key="attr.id" 
-							class="attribute-item"
-							:class="{ disabled: !selectedAttributeIds.includes(attr.id) }"
-							@click="toggleAttribute(attr.id, !selectedAttributeIds.includes(attr.id))"
-						>
-							<span class="attribute-label">{{ attr.label }}</span>
-							<v-checkbox
-								:model-value="selectedAttributeIds.includes(attr.id)"
-								@click.stop
-								@update:model-value="toggleAttribute(attr.id, $event)"
-							/>
+						
+						<div class="attribute-selector-content" v-show="!sidebarCollapsed">
+							<div class="attribute-selector-header">
+								<span class="title">{{ t('available_attributes') }}</span>
+								<v-button 
+									v-tooltip.bottom="t('toggle_all')" 
+									icon 
+									x-small 
+									secondary 
+									@click="toggleAllAttributes"
+								>
+									<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
+								</v-button>
+							</div>
+						
+							<div class="attribute-list">
+								<div 
+									v-for="attr in allAttributes" 
+									:key="attr.id" 
+									class="attribute-item"
+									:class="{ disabled: !selectedAttributeIds.includes(attr.id) }"
+									@click="toggleAttribute(attr.id, !selectedAttributeIds.includes(attr.id))"
+								>
+									<span class="attribute-label">{{ attr.label }}</span>
+									<v-checkbox
+										:model-value="selectedAttributeIds.includes(attr.id)"
+										@click.stop
+										@update:model-value="toggleAttribute(attr.id, $event)"
+									/>
+								</div>
+							</div>
 						</div>
-					</div>
 					</div>
 				</div>
 			</template>
@@ -1041,6 +1044,7 @@ async function loadAllAttributes() {
 				fields: ['id', 'code', 'label', 'usable_in_filter', 'type', 'type.input_interface'],
 				sort: ['label'],
 				limit: -1,
+				// No filter - get ALL attributes
 			},
 		});
 
@@ -1267,14 +1271,20 @@ watch(
 /* Attribute selector sidebar styles */
 .attribute-selector {
 	height: 100%;
-	display: flex;
-	flex-direction: column;
+	width: 100%;
 	background-color: var(--theme--background-subdued);
+}
+
+.sidebar-content {
+	height: 100%;
+	width: 100%;
 	position: relative;
+	transition: all 0.3s ease;
 	
 	&.collapsed {
-		width: 40px !important;
-		min-width: 40px !important;
+		.attribute-selector-content {
+			display: none;
+		}
 		
 		.sidebar-toggle {
 			position: absolute;
@@ -1297,7 +1307,7 @@ watch(
 	height: 24px;
 	border-radius: var(--theme--border-radius);
 	background-color: var(--theme--background-normal);
-	transition: background-color 0.2s;
+	transition: all 0.2s;
 	
 	&:hover {
 		background-color: var(--theme--background-accent);
@@ -1373,6 +1383,15 @@ watch(
 	
 	.v-info {
 		margin: 0;
+	}
+}
+
+/* Override v-drawer sidebar width when collapsed */
+.sidebar-collapsed {
+	:deep(.sidebar) {
+		width: 40px !important;
+		min-width: 40px !important;
+		overflow: hidden;
 	}
 }
 </style>
