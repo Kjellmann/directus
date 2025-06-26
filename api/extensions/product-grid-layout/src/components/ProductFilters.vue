@@ -12,57 +12,56 @@
 			<v-badge v-if="activeFilterCount > 0" :value="activeFilterCount" />
 		</v-button>
 
-		<v-drawer 
-			v-model="showFilters" 
-			:title="t('filters')" 
-			icon="filter_list" 
-			:sidebar-label="sidebarCollapsed ? '' : t('select_attributes')"
-			:sidebar-resizeable="!sidebarCollapsed"
-			:class="{ 'sidebar-collapsed': sidebarCollapsed }"
+		<v-drawer
+			v-model="showFilters"
+			ref="drawerRef"
+			:title="t('filters')"
+			icon="filter_list"
+			:sidebar-label="!sidebarCollapsed ? t('select_attributes') : ''"
+			:sidebar-resizeable="false"
 			@cancel="showFilters = false"
 		>
+			<template #actions>
+				<v-button
+					v-tooltip.left="sidebarCollapsed ? t('expand_sidebar') : t('collapse_sidebar')"
+					icon
+					rounded
+					secondary
+					@click="toggleSidebar"
+				>
+					<v-icon name="list" />
+				</v-button>
+			</template>
 			<template #sidebar>
 				<div class="attribute-selector">
-					<div class="sidebar-content" :class="{ collapsed: sidebarCollapsed }">
-						<div 
-							class="sidebar-toggle" 
-							v-tooltip.right="sidebarCollapsed ? t('expand') : t('collapse')"
-							@click="sidebarCollapsed = !sidebarCollapsed"
-						>
-							<v-icon :name="sidebarCollapsed ? 'chevron_right' : 'chevron_left'" />
-						</div>
-						
-						<div class="attribute-selector-content" v-show="!sidebarCollapsed">
-							<div class="attribute-selector-header">
-								<span class="title">{{ t('available_attributes') }}</span>
-								<v-button 
-									v-tooltip.bottom="t('toggle_all')" 
-									icon 
-									x-small 
-									secondary 
-									@click="toggleAllAttributes"
-								>
-									<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
-								</v-button>
-							</div>
-						
-							<div class="attribute-list">
-								<div 
-									v-for="attr in allAttributes" 
-									:key="attr.id" 
-									class="attribute-item"
-									:class="{ disabled: !selectedAttributeIds.includes(attr.id) }"
-									@click="toggleAttribute(attr.id, !selectedAttributeIds.includes(attr.id))"
-								>
-									<span class="attribute-label">{{ attr.label }}</span>
-									<v-checkbox
-										:model-value="selectedAttributeIds.includes(attr.id)"
-										@click.stop
-										@update:model-value="toggleAttribute(attr.id, $event)"
-									/>
+					<div class="attribute-selector-wrapper" :class="{ collapsed: sidebarCollapsed }">
+						<transition-expand class="attribute-selector-content">
+							<div v-show="!sidebarCollapsed">
+								<div class="attribute-selector-header">
+									<span class="title">{{ t('available_attributes') }}</span>
+									<v-button v-tooltip.bottom="t('toggle_all')" icon x-small secondary @click="toggleAllAttributes">
+										<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
+									</v-button>
+								</div>
+
+								<div class="attribute-list">
+									<div
+										v-for="attr in allAttributes"
+										:key="attr.id"
+										class="attribute-item"
+										:class="{ disabled: !selectedAttributeIds.includes(attr.id) }"
+										@click="toggleAttribute(attr.id, !selectedAttributeIds.includes(attr.id))"
+									>
+										<span class="attribute-label">{{ attr.label }}</span>
+										<v-checkbox
+											:model-value="selectedAttributeIds.includes(attr.id)"
+											@click.stop
+											@update:model-value="toggleAttribute(attr.id, $event)"
+										/>
+									</div>
 								</div>
 							</div>
-						</div>
+						</transition-expand>
 					</div>
 				</div>
 			</template>
@@ -182,7 +181,7 @@
 							/>
 						</div>
 					</div>
-					
+
 					<!-- No attributes selected message -->
 					<div v-else-if="selectedAttributeIds.length === 0" class="no-attributes-message">
 						<v-info icon="filter_list" :title="t('no_attributes_selected')">
@@ -205,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, markRaw } from 'vue';
+import { ref, computed, watch, onMounted, markRaw, nextTick } from 'vue';
 import { useApi, useStores, useExtensions } from '@directus/extensions-sdk';
 import { useI18n } from 'vue-i18n';
 import { createI18nOptions } from '../translations';
@@ -358,6 +357,86 @@ const allAttributes = ref<any[]>([]);
 const selectedAttributeIds = ref<number[]>([]);
 const isLoadingAttributes = ref(false);
 const sidebarCollapsed = ref(false);
+const drawerRef = ref();
+
+// Toggle sidebar function
+function toggleSidebar() {
+	sidebarCollapsed.value = !sidebarCollapsed.value;
+}
+
+// Computed sidebar width
+const sidebarWidth = computed(() => (sidebarCollapsed.value ? 0 : 220));
+
+// Watch for collapse changes and update sidebar width
+watch(sidebarCollapsed, async () => {
+	await nextTick();
+	updateSidebarWidth();
+});
+
+// Update sidebar width function
+function updateSidebarWidth() {
+	if (!drawerRef.value) return;
+
+	const drawerEl = drawerRef.value.$el as HTMLElement;
+	if (!drawerEl) return;
+
+	// Query both possible sidebar structures
+	let sidebar = drawerEl.querySelector('nav.sidebar') as HTMLElement;
+
+	// If not found, try the parent element that might contain the sidebar
+	if (!sidebar) {
+		const vDrawer = drawerEl.closest('.v-drawer');
+		if (vDrawer) {
+			sidebar = vDrawer.querySelector('nav.sidebar') as HTMLElement;
+		}
+	}
+	
+	// Try document.querySelector as last resort
+	if (!sidebar) {
+		sidebar = document.querySelector('.v-drawer nav.sidebar') as HTMLElement;
+	}
+
+	const resizeWrapper = drawerEl.querySelector('.resize-wrapper') as HTMLElement;
+
+	if (sidebar) {
+		sidebar.style.setProperty('width', `${sidebarWidth.value}px`, 'important');
+		sidebar.style.setProperty('min-width', `${sidebarWidth.value}px`, 'important');
+		sidebar.style.setProperty('max-width', `${sidebarWidth.value}px`, 'important');
+
+		// Add transition for smooth animation
+		sidebar.style.setProperty(
+			'transition',
+			'width var(--slow) var(--transition), min-width var(--slow) var(--transition), max-width var(--slow) var(--transition)',
+			'important',
+		);
+	}
+
+	if (resizeWrapper) {
+		resizeWrapper.style.setProperty('width', `${sidebarWidth.value}px`, 'important');
+	}
+}
+
+// Also update on initial render when drawer opens
+watch(showFilters, (isOpen) => {
+	if (isOpen) {
+		// Ensure sidebar width is set correctly when drawer opens
+		// Use multiple attempts to ensure DOM is fully rendered
+		nextTick(() => {
+			// First attempt
+			updateSidebarWidth();
+
+			// Second attempt after a slight delay
+			setTimeout(() => {
+				updateSidebarWidth();
+			}, 100);
+			
+			// Third attempt with longer delay
+			setTimeout(() => {
+				updateSidebarWidth();
+			}, 500);
+		});
+	}
+});
 
 // Map of input interfaces to filter components
 const filterComponentMap = {
@@ -387,8 +466,9 @@ const filterableAttributes = computed(() => {
 
 // Check if all attributes are selected
 const allAttributesSelected = computed(() => {
-	return allAttributes.value.length > 0 && 
-		allAttributes.value.every(attr => selectedAttributeIds.value.includes(attr.id));
+	return (
+		allAttributes.value.length > 0 && allAttributes.value.every((attr) => selectedAttributeIds.value.includes(attr.id))
+	);
 });
 
 // Get the appropriate filter component for an attribute
@@ -645,7 +725,7 @@ async function loadFilterOptions(attribute) {
 					inputInterface: inputInterface,
 					raw_data: response.data.data,
 					processed_options: filterOptions.value[attribute.code],
-					firstFiveProcessed: filterOptions.value[attribute.code].slice(0, 5)
+					firstFiveProcessed: filterOptions.value[attribute.code].slice(0, 5),
 				});
 			}
 		}
@@ -664,7 +744,7 @@ function getFilterOptions(attribute) {
 		code: attribute.code,
 		optionsCount: options.length,
 		options: options.slice(0, 5), // Show first 5 for debugging
-		loadingState: loadingOptions.value[attribute.code]
+		loadingState: loadingOptions.value[attribute.code],
 	});
 	return options;
 }
@@ -878,7 +958,7 @@ function buildStandardFilters() {
 			if (typeof filterValue === 'object') {
 				// Check if it's an operator object with null/undefined/empty values
 				const operators = ['_eq', '_neq', '_in', '_nin', '_gt', '_gte', '_lt', '_lte', '_contains', '_icontains'];
-				const hasValidValue = operators.some(op => {
+				const hasValidValue = operators.some((op) => {
 					if (filterValue[op] !== undefined) {
 						// Check if the value is meaningful
 						if (filterValue[op] === null) return false;
@@ -888,10 +968,10 @@ function buildStandardFilters() {
 					}
 					return false;
 				});
-				
+
 				// Also check for _empty/_nempty which don't need values
 				const hasEmptyOperator = filterValue._empty === true || filterValue._nempty === true;
-				
+
 				if (!hasValidValue && !hasEmptyOperator) {
 					// Skip this filter as it has no meaningful value
 					return;
@@ -974,7 +1054,7 @@ function initializeFilters() {
 				if (currentFilters.value[field] !== null && currentFilters.value[field] !== undefined) {
 					// Check if the filter has meaningful values
 					const filterValue = currentFilters.value[field];
-					
+
 					// Skip filters that are just {_eq: null} or similar
 					if (typeof filterValue === 'object') {
 						const hasValidValue = Object.entries(filterValue).some(([op, val]) => {
@@ -982,13 +1062,13 @@ function initializeFilters() {
 							if (Array.isArray(val) && val.length === 0) return false;
 							return true;
 						});
-						
+
 						if (!hasValidValue) {
 							systemFieldFilters.value[field] = null;
 							return;
 						}
 					}
-					
+
 					// Special handling for family and family_variant - convert numeric IDs to strings
 					if ((field === 'family' || field === 'family_variant') && currentFilters.value[field]) {
 						const filterValue = currentFilters.value[field];
@@ -1038,7 +1118,7 @@ function initializeFilters() {
 // Load all attributes from the attributes collection
 async function loadAllAttributes() {
 	if (isLoadingAttributes.value) return;
-	
+
 	isLoadingAttributes.value = true;
 	try {
 		const response = await api.get('/items/attributes', {
@@ -1055,13 +1135,11 @@ async function loadAllAttributes() {
 				...attr,
 				type_info: attr.type, // type is expanded with input_interface
 			}));
-			
+
 			// Initialize selected attributes based on usable_in_filter defaults
 			// TODO: In the future, load from user preferences here
-			const defaultSelected = allAttributes.value
-				.filter(attr => attr.usable_in_filter)
-				.map(attr => attr.id);
-			
+			const defaultSelected = allAttributes.value.filter((attr) => attr.usable_in_filter).map((attr) => attr.id);
+
 			selectedAttributeIds.value = defaultSelected;
 		}
 	} catch (error) {
@@ -1073,8 +1151,12 @@ async function loadAllAttributes() {
 
 // Toggle attribute selection
 function toggleAttribute(attributeId: number, selected: boolean) {
-	console.log('[ProductFilters] toggleAttribute called:', { attributeId, selected, currentSelected: selectedAttributeIds.value });
-	
+	console.log('[ProductFilters] toggleAttribute called:', {
+		attributeId,
+		selected,
+		currentSelected: selectedAttributeIds.value,
+	});
+
 	if (selected) {
 		// Add to selected if not already there
 		if (!selectedAttributeIds.value.includes(attributeId)) {
@@ -1082,10 +1164,10 @@ function toggleAttribute(attributeId: number, selected: boolean) {
 		}
 	} else {
 		// Remove from selected
-		selectedAttributeIds.value = selectedAttributeIds.value.filter(id => id !== attributeId);
-		
+		selectedAttributeIds.value = selectedAttributeIds.value.filter((id) => id !== attributeId);
+
 		// Clear any active filters for this attribute
-		const attribute = allAttributes.value.find(attr => attr.id === attributeId);
+		const attribute = allAttributes.value.find((attr) => attr.id === attributeId);
 		if (attribute) {
 			const filterKey = `attr_${attribute.code}`;
 			if (attributeFilters.value[filterKey]) {
@@ -1097,7 +1179,7 @@ function toggleAttribute(attributeId: number, selected: boolean) {
 			}
 		}
 	}
-	
+
 	console.log('[ProductFilters] After toggle, selectedAttributeIds:', selectedAttributeIds.value);
 }
 
@@ -1113,7 +1195,7 @@ function toggleAllAttributes() {
 		}
 	} else {
 		// Select all
-		selectedAttributeIds.value = allAttributes.value.map(attr => attr.id);
+		selectedAttributeIds.value = allAttributes.value.map((attr) => attr.id);
 	}
 }
 
@@ -1277,63 +1359,46 @@ watch(
 	background-color: var(--theme--background-subdued);
 }
 
-.sidebar-content {
+.attribute-selector-wrapper {
 	height: 100%;
-	width: 100%;
 	position: relative;
-	transition: width var(--slow) var(--transition);
-	
-	&.collapsed {
-		.attribute-selector-content {
-			opacity: 0;
-			transform: translateX(-20px);
-			pointer-events: none;
-			transition: opacity var(--fast) var(--transition), transform var(--fast) var(--transition);
-		}
-		
-		.sidebar-toggle {
-			position: absolute;
-			left: 50%;
-			transform: translateX(-50%);
-		}
-	}
-}
-
-.sidebar-toggle {
-	position: absolute;
-	top: 16px;
-	right: 8px;
-	z-index: 10;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
-	border-radius: var(--theme--border-radius);
-	background-color: var(--theme--background-normal);
-	transition: all var(--fast) var(--transition);
-	
-	&:hover {
-		background-color: var(--theme--background-accent);
-		
-		.v-icon {
-			color: var(--theme--foreground);
-		}
-	}
-	
-	.v-icon {
-		--v-icon-size: 18px;
-		color: var(--theme--foreground-subdued);
-		transition: color var(--fast) var(--transition);
-	}
+	overflow: hidden;
+	transition: all var(--slow) var(--transition);
 }
 
 .attribute-selector-content {
 	height: 100%;
 	display: flex;
 	flex-direction: column;
-	transition: opacity var(--slow) var(--transition), transform var(--slow) var(--transition);
+}
+
+/* Override drawer sidebar styles for collapsed state */
+:deep(.v-drawer nav.sidebar) {
+	transition:
+		width var(--slow) var(--transition),
+		min-width var(--slow) var(--transition),
+		max-width var(--slow) var(--transition) !important;
+}
+
+/* Hide content when collapsed */
+.attribute-selector-wrapper.collapsed .attribute-selector-content {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Override v-resizeable when sidebar is hidden */
+:deep(.v-resizeable) {
+	transition: width var(--slow) var(--transition) !important;
+}
+
+/* Ensure sidebar content is hidden when width is 0 */
+:deep(nav.sidebar[style*='width: 0px']) {
+	overflow: hidden;
+
+	.sidebar-content {
+		opacity: 0;
+		pointer-events: none;
+	}
 }
 
 .attribute-selector-header {
@@ -1342,7 +1407,7 @@ watch(
 	justify-content: space-between;
 	padding: 16px;
 	border-bottom: 1px solid var(--theme--border-color-subdued);
-	
+
 	.title {
 		font-weight: 600;
 		font-size: 14px;
@@ -1363,26 +1428,26 @@ watch(
 	padding: 8px 16px;
 	cursor: pointer;
 	transition: background-color 0.2s;
-	
+
 	&:hover {
 		background-color: var(--theme--background-normal);
 	}
-	
+
 	&.disabled {
 		opacity: 0.5;
-		
+
 		.attribute-label {
 			color: var(--theme--foreground-subdued);
 		}
 	}
-	
+
 	.attribute-label {
 		flex: 1;
 		font-size: 13px;
 		color: var(--theme--foreground-normal);
 		padding-right: 12px;
 	}
-	
+
 	.v-checkbox {
 		flex-shrink: 0;
 		--v-checkbox-color: var(--theme--primary);
@@ -1391,42 +1456,26 @@ watch(
 
 .no-attributes-message {
 	padding: 24px;
-	
+
 	.v-info {
 		margin: 0;
 	}
 }
 
-/* Override v-drawer sidebar width when collapsed - match Directus sidebar style */
-.sidebar-collapsed {
-	:deep(.sidebar) {
-		width: 60px !important;
-		min-width: 60px !important;
-		overflow: hidden;
-		transition: width var(--slow) var(--transition);
-	}
-	
-	:deep(.v-resizeable) {
-		width: 60px !important;
-		min-width: 60px !important;
-		transition: width var(--slow) var(--transition);
-	}
-	
-	:deep(.sidebar-toggle) {
-		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
-		top: 16px;
-		right: auto;
-	}
+/* Position the toggle button */
+.v-drawer :deep(.toggle) {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	z-index: 10;
 }
 
-/* Ensure smooth transitions on the drawer sidebar */
-.v-drawer :deep(.sidebar) {
-	transition: width var(--slow) var(--transition);
+/* Ensure content area has proper padding when sidebar is collapsed */
+.v-drawer :deep(.main) {
+	transition: margin-left var(--slow) var(--transition);
 }
 
-.v-drawer :deep(.v-resizeable) {
-	transition: width var(--slow) var(--transition);
+.v-drawer.sidebar-is-open :deep(.main) {
+	margin-left: 0;
 }
 </style>

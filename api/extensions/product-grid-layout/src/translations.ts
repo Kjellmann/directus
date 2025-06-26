@@ -68,6 +68,8 @@ export const translations = {
 		or_use_operator: 'Or use operator',
 		expand: 'Expand',
 		collapse: 'Collapse',
+		expand_sidebar: 'Expand Sidebar',
+		collapse_sidebar: 'Collapse Sidebar',
 		
 		// Operators
 		equals: 'Equals',
@@ -169,6 +171,8 @@ export const translations = {
 		or_use_operator: 'Eller bruk operator',
 		expand: 'Utvid',
 		collapse: 'Kollaps',
+		expand_sidebar: 'Utvid sidefelt',
+		collapse_sidebar: 'Kollaps sidefelt',
 		
 		// Operators
 		equals: 'Er lik',

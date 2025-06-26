@@ -101,14 +101,14 @@ const isWaitingForSavedColumns = ref(false);
 console.log('[TabularEnhanced] Initial check:', {
 	tableHeaders: props.tableHeaders?.length || 0,
 	savedColumns: props.layoutOptions?.savedColumns,
-	hasInitializedColumns: hasInitializedColumns.value
+	hasInitializedColumns: hasInitializedColumns.value,
 });
 
 if ((!props.tableHeaders || props.tableHeaders.length === 0) && !props.layoutOptions?.savedColumns) {
 	console.log('[TabularEnhanced] Initializing default headers');
 	// Use primary_image, id, enabled, product_type, family as defaults
-	const defaultHeaders = [];
-	
+	const defaultHeaders = [] as any[];
+
 	// Always include primary_image first
 	defaultHeaders.push({
 		text: 'Image',
@@ -118,7 +118,7 @@ if ((!props.tableHeaders || props.tableHeaders.length === 0) && !props.layoutOpt
 		sortable: false,
 		field: { type: 'file', interface: 'file-image' },
 	});
-	
+
 	// Add other system fields if they exist
 	const systemFields = [
 		{ text: 'ID', value: 'id', width: 200, type: 'string' },
@@ -126,10 +126,10 @@ if ((!props.tableHeaders || props.tableHeaders.length === 0) && !props.layoutOpt
 		{ text: 'Product Type', value: 'product_type', width: 150, type: 'string' },
 		{ text: 'Family', value: 'family', width: 150, type: 'string' },
 	];
-	
-	systemFields.forEach(field => {
+
+	systemFields.forEach((field) => {
 		// Check if field exists in the collection
-		if (props.fields?.some(f => f.field === field.value)) {
+		if (props.fields?.some((f) => f.field === field.value)) {
 			defaultHeaders.push({
 				text: field.text,
 				value: field.value,
@@ -140,7 +140,7 @@ if ((!props.tableHeaders || props.tableHeaders.length === 0) && !props.layoutOpt
 			});
 		}
 	});
-	
+
 	emit('update:tableHeaders', defaultHeaders);
 } else if (props.layoutOptions?.savedColumns && props.layoutOptions.savedColumns.length > 0) {
 	console.log('[TabularEnhanced] Found saved columns, marking as initialized:', props.layoutOptions.savedColumns);
@@ -155,7 +155,7 @@ if ((!props.tableHeaders || props.tableHeaders.length === 0) && !props.layoutOpt
 // Load attributes on mount
 onMounted(() => {
 	console.log('[TabularEnhanced] onMounted - checking if we should extract attributes');
-	
+
 	// If we have saved columns, wait a bit for the actions component to apply them
 	if (props.layoutOptions?.savedColumns) {
 		console.log('[TabularEnhanced] Delaying attribute extraction to allow saved columns to be applied');
@@ -193,7 +193,7 @@ const extractAttributesFromTransformedItems = () => {
 			// Try to find a label from somewhere, or use the code
 			const label = code.charAt(0).toUpperCase() + code.slice(1).replace(/_/g, ' ');
 			// Try to find if this attribute has usable_in_grid from the attributeList prop
-			const attrFromList = props.attributeList?.find(a => a.code === code);
+			const attrFromList = props.attributeList?.find((a) => a.code === code);
 			return {
 				id: field,
 				code: code,
@@ -212,10 +212,19 @@ const extractAttributesFromTransformedItems = () => {
 		savedColumns: props.layoutOptions?.savedColumns,
 		hasInitializedColumns: hasInitializedColumns.value,
 		isWaitingForSavedColumns: isWaitingForSavedColumns.value,
-		shouldAutoAdd: attributes.value.length > 0 && !props.layoutOptions?.savedColumns && !hasInitializedColumns.value && !isWaitingForSavedColumns.value
+		shouldAutoAdd:
+			attributes.value.length > 0 &&
+			!props.layoutOptions?.savedColumns &&
+			!hasInitializedColumns.value &&
+			!isWaitingForSavedColumns.value,
 	});
-	
-	if (attributes.value.length > 0 && !props.layoutOptions?.savedColumns && !hasInitializedColumns.value && !isWaitingForSavedColumns.value) {
+
+	if (
+		attributes.value.length > 0 &&
+		!props.layoutOptions?.savedColumns &&
+		!hasInitializedColumns.value &&
+		!isWaitingForSavedColumns.value
+	) {
 		const currentHeaders = [...props.tableHeaders];
 		const existingFields = new Set(currentHeaders.map((h) => h.value));
 
@@ -232,7 +241,10 @@ const extractAttributesFromTransformedItems = () => {
 			}));
 
 		if (attributeHeaders.length > 0) {
-			console.log('[TabularEnhanced] Auto-adding attribute columns:', attributeHeaders.map(h => h.value));
+			console.log(
+				'[TabularEnhanced] Auto-adding attribute columns:',
+				attributeHeaders.map((h) => h.value),
+			);
 			emit('update:tableHeaders', [...currentHeaders, ...attributeHeaders]);
 			hasInitializedColumns.value = true;
 		}
@@ -365,22 +377,26 @@ watch(
 	() => props.tableHeaders,
 	(headers) => {
 		console.log('[TabularEnhanced] tableHeaders changed:', {
-			headers: headers?.map(h => h.value),
+			headers: headers?.map((h) => h.value),
 			savedColumns: props.layoutOptions?.savedColumns,
-			hasInitializedColumns: hasInitializedColumns.value
+			hasInitializedColumns: hasInitializedColumns.value,
 		});
-		
+
 		// If headers are being set and we have saved columns, mark as initialized
 		if (headers && headers.length > 0 && props.layoutOptions?.savedColumns) {
 			console.log('[TabularEnhanced] Headers set from saved columns, marking as initialized');
 			hasInitializedColumns.value = true;
 			isWaitingForSavedColumns.value = false;
 		}
-		
+
 		// If headers match saved columns, we're done waiting
-		if (headers && headers.length > 0 && props.layoutOptions?.savedColumns && 
-			headers.length === props.layoutOptions.savedColumns.length) {
-			const headerValues = headers.map(h => h.value).sort();
+		if (
+			headers &&
+			headers.length > 0 &&
+			props.layoutOptions?.savedColumns &&
+			headers.length === props.layoutOptions.savedColumns.length
+		) {
+			const headerValues = headers.map((h) => h.value).sort();
 			const savedValues = [...props.layoutOptions.savedColumns].sort();
 			if (JSON.stringify(headerValues) === JSON.stringify(savedValues)) {
 				console.log('[TabularEnhanced] Headers match saved columns, no longer waiting');
@@ -388,7 +404,7 @@ watch(
 			}
 		}
 	},
-	{ immediate: true }
+	{ immediate: true },
 );
 </script>
 
