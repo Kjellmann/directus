@@ -21,19 +21,24 @@
 			@cancel="showFilters = false"
 		>
 			<template #sidebar>
-				<div class="attribute-selector">
-					<div class="attribute-selector-header">
-						<span class="title">{{ t('available_attributes') }}</span>
-						<v-button 
-							v-tooltip.bottom="t('toggle_all')" 
-							icon 
-							x-small 
-							secondary 
-							@click="toggleAllAttributes"
-						>
-							<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
-						</v-button>
+				<div class="attribute-selector" :class="{ collapsed: sidebarCollapsed }">
+					<div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+						<v-icon :name="sidebarCollapsed ? 'chevron_right' : 'chevron_left'" />
 					</div>
+					
+					<div class="attribute-selector-content" v-show="!sidebarCollapsed">
+						<div class="attribute-selector-header">
+							<span class="title">{{ t('available_attributes') }}</span>
+							<v-button 
+								v-tooltip.bottom="t('toggle_all')" 
+								icon 
+								x-small 
+								secondary 
+								@click="toggleAllAttributes"
+							>
+								<v-icon :name="allAttributesSelected ? 'check_box' : 'check_box_outline_blank'" />
+							</v-button>
+						</div>
 					
 					<div class="attribute-list">
 						<div 
@@ -50,6 +55,7 @@
 								@update:model-value="toggleAttribute(attr.id, $event)"
 							/>
 						</div>
+					</div>
 					</div>
 				</div>
 			</template>
@@ -344,6 +350,7 @@ const familyVariantOptions = ref<Array<{ text: string; value: any }>>([]);
 const allAttributes = ref<any[]>([]);
 const selectedAttributeIds = ref<number[]>([]);
 const isLoadingAttributes = ref(false);
+const sidebarCollapsed = ref(false);
 
 // Map of input interfaces to filter components
 const filterComponentMap = {
@@ -364,7 +371,10 @@ const filterComponentMap = {
 
 // Get filterable attributes with type info based on user selection
 const filterableAttributes = computed(() => {
-	return props.attributes.filter((attr: any) => {
+	// First check props.attributes, then fall back to allAttributes
+	const attributeSource = props.attributes.length > 0 ? props.attributes : allAttributes.value;
+	
+	return attributeSource.filter((attr: any) => {
 		// Filter by selected attributes and ensure we have type info
 		return selectedAttributeIds.value.includes(attr.id) && attr.type_info;
 	});
@@ -1260,6 +1270,49 @@ watch(
 	display: flex;
 	flex-direction: column;
 	background-color: var(--theme--background-subdued);
+	position: relative;
+	
+	&.collapsed {
+		width: 40px !important;
+		min-width: 40px !important;
+		
+		.sidebar-toggle {
+			position: absolute;
+			left: 50%;
+			transform: translateX(-50%);
+		}
+	}
+}
+
+.sidebar-toggle {
+	position: absolute;
+	top: 16px;
+	right: 8px;
+	z-index: 10;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: var(--theme--border-radius);
+	background-color: var(--theme--background-normal);
+	transition: background-color 0.2s;
+	
+	&:hover {
+		background-color: var(--theme--background-accent);
+	}
+	
+	.v-icon {
+		--v-icon-size: 18px;
+		color: var(--theme--foreground-subdued);
+	}
+}
+
+.attribute-selector-content {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
 }
 
 .attribute-selector-header {
