@@ -374,13 +374,22 @@ const filterComponentMap = {
 
 // Get filterable attributes with type info based on user selection
 const filterableAttributes = computed(() => {
-	// First check props.attributes, then fall back to allAttributes
-	const attributeSource = props.attributes.length > 0 ? props.attributes : allAttributes.value;
-	
-	return attributeSource.filter((attr: any) => {
-		// Filter by selected attributes and ensure we have type info
-		return selectedAttributeIds.value.includes(attr.id) && attr.type_info;
+	// Get selected attributes from allAttributes (which has ALL attributes)
+	const selected = allAttributes.value.filter((attr: any) => {
+		// Filter by selected attributes
+		return selectedAttributeIds.value.includes(attr.id);
 	});
+	
+	// Log for debugging
+	console.log('[ProductFilters] filterableAttributes:', {
+		allAttributesCount: allAttributes.value.length,
+		selectedCount: selectedAttributeIds.value.length,
+		selectedAttributes: selected.map(a => ({ id: a.id, code: a.code, type_info: a.type_info })),
+		filteredWithTypeInfo: selected.filter(a => a.type_info).length
+	});
+	
+	// Return only those with type info
+	return selected.filter(attr => attr.type_info);
 });
 
 // Check if all attributes are selected
@@ -1389,9 +1398,26 @@ watch(
 /* Override v-drawer sidebar width when collapsed */
 .sidebar-collapsed {
 	:deep(.sidebar) {
-		width: 40px !important;
-		min-width: 40px !important;
+		width: 48px !important;
+		min-width: 48px !important;
 		overflow: hidden;
+	}
+	
+	:deep(.v-resizeable) {
+		width: 48px !important;
+		min-width: 48px !important;
+	}
+	
+	:deep(.attribute-selector-content) {
+		display: none !important;
+	}
+	
+	:deep(.sidebar-toggle) {
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+		top: 16px;
+		right: auto;
 	}
 }
 </style>
