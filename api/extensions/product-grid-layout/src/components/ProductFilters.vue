@@ -24,7 +24,11 @@
 			<template #sidebar>
 				<div class="attribute-selector">
 					<div class="sidebar-content" :class="{ collapsed: sidebarCollapsed }">
-						<div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+						<div 
+							class="sidebar-toggle" 
+							v-tooltip.right="sidebarCollapsed ? t('expand') : t('collapse')"
+							@click="sidebarCollapsed = !sidebarCollapsed"
+						>
 							<v-icon :name="sidebarCollapsed ? 'chevron_right' : 'chevron_left'" />
 						</div>
 						
@@ -375,21 +379,10 @@ const filterComponentMap = {
 // Get filterable attributes with type info based on user selection
 const filterableAttributes = computed(() => {
 	// Get selected attributes from allAttributes (which has ALL attributes)
-	const selected = allAttributes.value.filter((attr: any) => {
-		// Filter by selected attributes
-		return selectedAttributeIds.value.includes(attr.id);
+	return allAttributes.value.filter((attr: any) => {
+		// Filter by selected attributes and ensure we have type info
+		return selectedAttributeIds.value.includes(attr.id) && attr.type_info;
 	});
-	
-	// Log for debugging
-	console.log('[ProductFilters] filterableAttributes:', {
-		allAttributesCount: allAttributes.value.length,
-		selectedCount: selectedAttributeIds.value.length,
-		selectedAttributes: selected.map(a => ({ id: a.id, code: a.code, type_info: a.type_info })),
-		filteredWithTypeInfo: selected.filter(a => a.type_info).length
-	});
-	
-	// Return only those with type info
-	return selected.filter(attr => attr.type_info);
 });
 
 // Check if all attributes are selected
@@ -1288,11 +1281,14 @@ watch(
 	height: 100%;
 	width: 100%;
 	position: relative;
-	transition: all 0.3s ease;
+	transition: width var(--slow) var(--transition);
 	
 	&.collapsed {
 		.attribute-selector-content {
-			display: none;
+			opacity: 0;
+			transform: translateX(-20px);
+			pointer-events: none;
+			transition: opacity var(--fast) var(--transition), transform var(--fast) var(--transition);
 		}
 		
 		.sidebar-toggle {
@@ -1316,15 +1312,20 @@ watch(
 	height: 24px;
 	border-radius: var(--theme--border-radius);
 	background-color: var(--theme--background-normal);
-	transition: all 0.2s;
+	transition: all var(--fast) var(--transition);
 	
 	&:hover {
 		background-color: var(--theme--background-accent);
+		
+		.v-icon {
+			color: var(--theme--foreground);
+		}
 	}
 	
 	.v-icon {
 		--v-icon-size: 18px;
 		color: var(--theme--foreground-subdued);
+		transition: color var(--fast) var(--transition);
 	}
 }
 
@@ -1332,6 +1333,7 @@ watch(
 	height: 100%;
 	display: flex;
 	flex-direction: column;
+	transition: opacity var(--slow) var(--transition), transform var(--slow) var(--transition);
 }
 
 .attribute-selector-header {
@@ -1395,21 +1397,19 @@ watch(
 	}
 }
 
-/* Override v-drawer sidebar width when collapsed */
+/* Override v-drawer sidebar width when collapsed - match Directus sidebar style */
 .sidebar-collapsed {
 	:deep(.sidebar) {
-		width: 48px !important;
-		min-width: 48px !important;
+		width: 60px !important;
+		min-width: 60px !important;
 		overflow: hidden;
+		transition: width var(--slow) var(--transition);
 	}
 	
 	:deep(.v-resizeable) {
-		width: 48px !important;
-		min-width: 48px !important;
-	}
-	
-	:deep(.attribute-selector-content) {
-		display: none !important;
+		width: 60px !important;
+		min-width: 60px !important;
+		transition: width var(--slow) var(--transition);
 	}
 	
 	:deep(.sidebar-toggle) {
@@ -1419,5 +1419,14 @@ watch(
 		top: 16px;
 		right: auto;
 	}
+}
+
+/* Ensure smooth transitions on the drawer sidebar */
+.v-drawer :deep(.sidebar) {
+	transition: width var(--slow) var(--transition);
+}
+
+.v-drawer :deep(.v-resizeable) {
+	transition: width var(--slow) var(--transition);
 }
 </style>

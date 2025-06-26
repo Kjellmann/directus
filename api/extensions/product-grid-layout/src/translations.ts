@@ -66,6 +66,8 @@ export const translations = {
 		show_advanced: 'Show Advanced',
 		hide_advanced: 'Hide Advanced',
 		or_use_operator: 'Or use operator',
+		expand: 'Expand',
+		collapse: 'Collapse',
 		
 		// Operators
 		equals: 'Equals',
@@ -165,6 +167,8 @@ export const translations = {
 		show_advanced: 'Vis avansert',
 		hide_advanced: 'Skjul avansert',
 		or_use_operator: 'Eller bruk operator',
+		expand: 'Utvid',
+		collapse: 'Kollaps',
 		
 		// Operators
 		equals: 'Er lik',
